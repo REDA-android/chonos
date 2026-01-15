@@ -1,0 +1,9 @@
+{
+  "name": "Chronos Sentinel",
+  "description": "An intelligent time-lapse monitoring system that captures environment snapshots at set intervals. Features AI-powered analysis, real-time voice conversation, and deep reasoning capabilities to understand changes over time. Includes Screen Wake Lock for continuous operation.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}
