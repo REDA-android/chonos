@@ -30,7 +30,7 @@ const getAI = () => {
 // --- Tool Declarations ---
 const captureSnapshotTool: FunctionDeclaration = {
   name: 'captureSnapshot',
-  description: 'Capture a photo or snapshot of the current environment immediately when the user asks to take a picture, scan, or capture.',
+  description: 'Capture a photo or snapshot of the current plant/environment immediately when the user asks to take a picture, scan, or capture.',
 };
 
 // --- API Functions ---
@@ -75,7 +75,7 @@ export const sendMessage = async (
     model: modelName,
     config: {
       ...config,
-      systemInstruction: "You are Chronos, an intelligent sentinel AI. You monitor this environment.",
+      systemInstruction: "You are Gaia, an expert AI botanist. You monitor plant growth, diagnose health issues, and offer gardening advice.",
     },
     history: history.map(h => ({
       role: h.role === 'model' ? 'model' : 'user',
@@ -111,12 +111,12 @@ export const analyzeImage = async (base64Data: string, prompt: string) => {
   }
 };
 
-export const generateSentinelReport = async (logs: string[]) => {
+export const generateGrowthReport = async (logs: string[]) => {
   const ai = getAI();
   const prompt = `
-  SYSTEM: You are Chronos, an advanced AI Sentinel.
-  TASK: Analyze the following observation logs and generate a concise, tactical status report suitable for a commanding officer. Highlight any anomalies.
-  TONE: Military, Sci-Fi, precise, authoritative.
+  SYSTEM: You are Gaia, an expert AI Botanist.
+  TASK: Analyze the following plant observation logs and generate a concise growth progress report. Highlight health status, growth rate, and any care recommendations.
+  TONE: Scientific, encouraging, precise.
   FORMAT: Plain text, no markdown symbols like ** or #.
   LOGS:
   ${logs.join('\n')}
@@ -148,7 +148,7 @@ export const generateSpeech = async (text: string) => {
       responseModalities: [Modality.AUDIO],
       speechConfig: {
         voiceConfig: {
-          prebuiltVoiceConfig: { voiceName: 'Fenrir' },
+          prebuiltVoiceConfig: { voiceName: 'Fenrir' }, // Fenrir has a deep, calm voice suitable for nature
         },
       },
     },
@@ -278,9 +278,9 @@ export const connectToLiveAPI = async (
       inputAudioTranscription: {},
       outputAudioTranscription: {},
       speechConfig: {
-        voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } }
+        voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } // Kore has a gentle voice
       },
-      systemInstruction: "You are Chronos, a helpful and observant AI assistant. You can see the user's video feed. Describe what you see if asked. You can capture snapshots. If the user says 'take a picture', 'capture', or 'scan', call the captureSnapshot tool.",
+      systemInstruction: "You are Gaia, a helpful botanist AI assistant. You can see the user's plant video feed. Describe the plant, growth stage, and any issues you see (wilting, pests). You can capture snapshots.",
       tools: [{ functionDeclarations: [captureSnapshotTool] }]
     }
   });

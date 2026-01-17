@@ -8,12 +8,12 @@ import {
   sendMessage, 
   generateSpeech, 
   getFastResponse, 
-  generateSentinelReport,
+  generateGrowthReport,
   decodeAudio,
   decodeAudioData
 } from './services/geminiService';
 import { 
-  Shield, 
+  Leaf, 
   Play, 
   Square, 
   Mic, 
@@ -46,7 +46,13 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize,
-  Video
+  Video,
+  Sprout,
+  Droplet,
+  Sun,
+  Flower,
+  AlertCircle,
+  Repeat
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -60,11 +66,13 @@ const App: React.FC = () => {
     facingMode: 'environment',
     resolution: 'med',
     playbackFps: 4,
-    timestampPrecision: 'both'
+    timestampPrecision: 'both',
+    minConfidenceThreshold: 70
   });
   const [selectedImage, setSelectedImage] = useState<CapturedImage | null>(null);
   const [liveMode, setLiveMode] = useState(false);
   const [playbackMode, setPlaybackMode] = useState(false);
+  const [autoAdvance, setAutoAdvance] = useState(true);
   const [stealthMode, setStealthMode] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [expandedAnalysis, setExpandedAnalysis] = useState(false);
@@ -113,25 +121,25 @@ const App: React.FC = () => {
     }
   };
 
-  const getThreatLevel = (text?: string) => {
+  const getHealthStatus = (text?: string) => {
     if (!text) return 'UNKNOWN';
     const t = text.toLowerCase();
-    if (t.includes('intruder') || t.includes('danger') || t.includes('weapon') || t.includes('fire') || t.includes('smoke') || t.includes('suspicious')) return 'CRITICAL';
-    if (t.includes('person') || t.includes('human') || t.includes('movement') || t.includes('change') || t.includes('vehicle')) return 'CAUTION';
-    return 'SAFE';
+    if (t.includes('dead') || t.includes('disease') || t.includes('critical') || t.includes('rot') || t.includes('pest')) return 'CRITICAL';
+    if (t.includes('stress') || t.includes('wilt') || t.includes('yellow') || t.includes('dry') || t.includes('water')) return 'STRESSED';
+    return 'HEALTHY';
   };
 
   const parseMetaData = (text: string) => {
     const confidence = text.match(/\[CONFIDENCE:\s*(\d+)%?\]/i);
-    const category = text.match(/\[CATEGORY:\s*([^\]]+)\]/i);
+    const stage = text.match(/\[STAGE:\s*([^\]]+)\]/i);
     const tags = text.match(/\[TAGS:\s*([^\]]+)\]/i);
-    const threat = text.match(/\[THREAT:\s*(SAFE|CAUTION|CRITICAL)\]/i);
+    const health = text.match(/\[HEALTH:\s*(HEALTHY|STRESSED|CRITICAL)\]/i);
 
     return {
       confidence: confidence ? parseInt(confidence[1]) : undefined,
-      sceneCategory: category ? category[1].trim() : undefined,
+      growthStage: stage ? stage[1].trim() : undefined,
       eventTags: tags ? tags[1].split(',').map(t => t.trim()) : undefined,
-      threatLevel: threat ? (threat[1].toUpperCase() as 'SAFE'|'CAUTION'|'CRITICAL') : undefined
+      healthStatus: health ? (health[1].toUpperCase() as 'HEALTHY'|'STRESSED'|'CRITICAL') : undefined
     };
   };
 
@@ -200,8 +208,10 @@ const App: React.FC = () => {
   }, [active, settings.intervalHours]);
 
   useEffect(() => {
-    if (playbackMode && images.length > 0) {
-      let idx = 0;
+    if (playbackMode && images.length > 0 && autoAdvance) {
+      let idx = selectedImage ? images.findIndex(img => img.id === selectedImage.id) : 0;
+      if (idx === -1) idx = 0;
+
       const playbackInterval = 1000 / settings.playbackFps;
       playbackRef.current = setInterval(() => {
         setSelectedImage(images[idx]);
@@ -211,7 +221,7 @@ const App: React.FC = () => {
       clearInterval(playbackRef.current);
     }
     return () => clearInterval(playbackRef.current);
-  }, [playbackMode, images, settings.playbackFps]);
+  }, [playbackMode, images, settings.playbackFps, autoAdvance]); // autoAdvance is now a dependency
 
   // Reset zoom when selecting a new image
   useEffect(() => {
@@ -235,15 +245,15 @@ const App: React.FC = () => {
 
         if (settings.autoAnalyze) {
           try {
-            const prompt = `Analyze this security snapshot.
-            1. Provide a VERY CONCISE SUMMARY (max 15 words) of the key observation.
-            2. Determine Threat Level: SAFE (routine/empty), CAUTION (person/vehicle/change), or CRITICAL (weapon/fire/intruder).
-            3. Identify Scene Category (e.g., Indoors/Outdoors, Day/Night).
-            4. Identify Event Tags (e.g., person detected, door opened).
+            const prompt = `Analyze this plant snapshot.
+            1. Provide a VERY CONCISE SUMMARY (max 15 words) of the growth progress or issues.
+            2. Determine Health Status: HEALTHY, STRESSED (needs water/light), or CRITICAL (disease/pests).
+            3. Identify Growth Stage (e.g., Germination, Vegetative, Flowering, Fruiting).
+            4. Identify Event Tags (e.g., new leaf, yellowing, wilting, flowering).
             
             Format the end of your response with these exact tags:
-            [THREAT: LEVEL]
-            [CATEGORY: category]
+            [HEALTH: STATUS]
+            [STAGE: stage]
             [TAGS: tag1, tag2]
             [CONFIDENCE: X%]`;
             
@@ -267,15 +277,15 @@ const App: React.FC = () => {
   const performManualAnalysis = async (img: CapturedImage) => {
     setIsProcessing(true);
     try {
-        const prompt = `Analyze this security snapshot.
-        1. Provide a VERY CONCISE SUMMARY (max 15 words) of the key observation.
-        2. Determine Threat Level: SAFE (routine/empty), CAUTION (person/vehicle/change), or CRITICAL (weapon/fire/intruder).
-        3. Identify Scene Category (e.g., Indoors/Outdoors, Day/Night).
-        4. Identify Event Tags (e.g., person detected, door opened).
+        const prompt = `Analyze this plant snapshot.
+        1. Provide a VERY CONCISE SUMMARY (max 15 words) of the growth progress or issues.
+        2. Determine Health Status: HEALTHY, STRESSED (needs water/light), or CRITICAL (disease/pests).
+        3. Identify Growth Stage (e.g., Germination, Vegetative, Flowering, Fruiting).
+        4. Identify Event Tags (e.g., new leaf, yellowing, wilting, flowering).
         
         Format the end of your response with these exact tags:
-        [THREAT: LEVEL]
-        [CATEGORY: category]
+        [HEALTH: STATUS]
+        [STAGE: stage]
         [TAGS: tag1, tag2]
         [CONFIDENCE: X%]`;
         
@@ -349,7 +359,7 @@ const App: React.FC = () => {
       setChatMessages(prev => [...prev, {
         id: Date.now().toString(),
         role: 'system',
-        text: "Error connecting to Sentinel AI network.",
+        text: "Error connecting to Gaia network.",
         timestamp: Date.now()
       }]);
     } finally {
@@ -370,7 +380,7 @@ const App: React.FC = () => {
   };
 
   const clearTimeline = () => {
-    if(window.confirm("WARNING: PURGE ALL SURVEILLANCE DATA? THIS ACTION CANNOT BE UNDONE.")) {
+    if(window.confirm("WARNING: PURGE ALL PLANT DATA? THIS ACTION CANNOT BE UNDONE.")) {
       setImages([]);
       setSelectedImage(null);
       setPlaybackMode(false);
@@ -384,11 +394,11 @@ const App: React.FC = () => {
       const logs = images.slice(-5).map(img => 
         `[${new Date(img.timestamp).toLocaleTimeString()}] ${img.analysis || 'Image captured. No analysis available.'}`
       );
-      const report = await generateSentinelReport(logs);
+      const report = await generateGrowthReport(logs);
       setChatMessages(prev => [...prev, {
         id: Date.now().toString(),
         role: 'model',
-        text: `REPORT GENERATED:\n${report}`,
+        text: `GROWTH REPORT:\n${report}`,
         timestamp: Date.now()
       }]);
       const audio = await generateSpeech(report);
@@ -436,15 +446,14 @@ const App: React.FC = () => {
   };
   const handleStaticMouseUp = () => setIsStaticDragging(false);
 
-  // ... (rest of rendering functions same as before)
-  const renderThreatBadge = (level: string) => {
-    switch(level) {
+  const renderHealthBadge = (status: string) => {
+    switch(status) {
       case 'CRITICAL': 
-        return <div className="flex items-center gap-1 text-red-500 bg-red-500/10 px-2 py-1 rounded border border-red-500 animate-pulse"><AlertTriangle size={14}/> CRITICAL</div>;
-      case 'CAUTION':
-        return <div className="flex items-center gap-1 text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded border border-yellow-500"><Activity size={14}/> CAUTION</div>;
-      case 'SAFE':
-        return <div className="flex items-center gap-1 text-cyber-success bg-cyber-success/10 px-2 py-1 rounded border border-cyber-success"><CheckCircle size={14}/> SAFE</div>;
+        return <div className="flex items-center gap-1 text-red-500 bg-red-500/10 px-2 py-1 rounded border border-red-500 animate-pulse"><AlertTriangle size={14}/> DISEASE / PEST</div>;
+      case 'STRESSED':
+        return <div className="flex items-center gap-1 text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded border border-yellow-500"><Droplet size={14}/> STRESSED</div>;
+      case 'HEALTHY':
+        return <div className="flex items-center gap-1 text-cyber-accent bg-cyber-accent/10 px-2 py-1 rounded border border-cyber-accent"><Sprout size={14}/> THRIVING</div>;
       default:
         return <div className="flex items-center gap-1 text-gray-500 bg-gray-500/10 px-2 py-1 rounded border border-gray-500">ANALYZING...</div>;
     }
@@ -487,7 +496,20 @@ const App: React.FC = () => {
     );
   };
 
-  const currentThreat = selectedImage?.threatLevel || (selectedImage?.analysis ? getThreatLevel(selectedImage.analysis) : 'SAFE');
+  const currentStatus = selectedImage?.healthStatus || (selectedImage?.analysis ? getHealthStatus(selectedImage.analysis) : 'HEALTHY');
+  
+  // Calculate latest health for visual aura
+  const latestImage = images.length > 0 ? images[images.length - 1] : null;
+  const latestHealth = latestImage?.healthStatus || 'UNKNOWN';
+
+  const getAuraClass = (status: string) => {
+    switch(status) {
+        case 'CRITICAL': return 'shadow-[0_0_80px_rgba(239,68,68,0.3)] border-red-500/50';
+        case 'STRESSED': return 'shadow-[0_0_80px_rgba(234,179,8,0.3)] border-yellow-500/50';
+        case 'HEALTHY': return 'shadow-[0_0_80px_rgba(132,204,22,0.3)] border-cyber-accent/50';
+        default: return 'shadow-[0_0_20px_rgba(132,204,22,0.05)] border-cyber-700';
+    }
+  };
 
   return (
     <div className="min-h-screen bg-cyber-900 text-gray-200 font-sans selection:bg-cyber-accent selection:text-black">
@@ -498,9 +520,9 @@ const App: React.FC = () => {
           onDoubleClick={() => setStealthMode(false)}
         >
           <div className="animate-pulse opacity-20">
-            <Shield size={64} className="text-cyber-accent" />
+            <Leaf size={64} className="text-cyber-accent" />
           </div>
-          <p className="text-cyber-accent/20 font-mono text-xs mt-4 animate-bounce">SYSTEM ACTIVE // MONITORING</p>
+          <p className="text-cyber-accent/20 font-mono text-xs mt-4 animate-bounce">GAIA ACTIVE // MONITORING</p>
           <p className="text-gray-800 text-[10px] absolute bottom-8">DOUBLE TAP TO WAKE</p>
           <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(0,0,0,0.5)_50%)] bg-[length:100%_4px] pointer-events-none opacity-50"></div>
         </div>
@@ -510,8 +532,8 @@ const App: React.FC = () => {
       <header className="border-b border-cyber-700 bg-cyber-800/50 backdrop-blur-md sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <Shield className="text-cyber-accent" />
-            <h1 className="text-xl font-bold tracking-wider font-mono text-white hidden sm:block">CHRONOS <span className="text-cyber-accent">SENTINEL</span></h1>
+            <Leaf className="text-cyber-accent" />
+            <h1 className="text-xl font-bold tracking-wider font-mono text-white hidden sm:block">CHRONOS <span className="text-cyber-accent">GAIA</span></h1>
           </div>
           <div className="flex items-center space-x-2 md:space-x-4">
              <button 
@@ -530,7 +552,7 @@ const App: React.FC = () => {
              </button>
              <button 
                 onClick={() => setLiveMode(true)}
-                className="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-cyber-700 hover:bg-cyber-accent hover:text-black transition-colors border border-cyber-accent/30 shadow-[0_0_10px_rgba(0,242,255,0.2)]"
+                className="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-cyber-700 hover:bg-cyber-accent hover:text-black transition-colors border border-cyber-accent/30 shadow-[0_0_10px_rgba(132,204,22,0.2)]"
              >
                 <Video size={16} />
                 <span className="text-sm font-semibold hidden sm:inline">VIDEO LINK</span>
@@ -563,6 +585,19 @@ const App: React.FC = () => {
               </section>
 
               <section>
+                <label className="text-xs font-mono text-gray-400 mb-2 block flex items-center gap-2"><Activity size={12}/> MIN. CONFIDENCE</label>
+                <div className="flex items-center gap-4">
+                  <input 
+                    type="range" min="1" max="100" step="1" 
+                    value={settings.minConfidenceThreshold} 
+                    onChange={(e) => setSettings({...settings, minConfidenceThreshold: parseInt(e.target.value)})}
+                    className="flex-1 accent-cyber-accent"
+                  />
+                  <span className="text-cyber-accent font-mono text-sm">{settings.minConfidenceThreshold}%</span>
+                </div>
+              </section>
+
+              <section>
                 <label className="text-xs font-mono text-gray-400 mb-2 block flex items-center gap-2"><Calendar size={12}/> T-STAMP OVERLAY</label>
                 <div className="grid grid-cols-3 gap-2">
                    {(['date', 'time', 'both'] as const).map(p => (
@@ -576,7 +611,7 @@ const App: React.FC = () => {
               </section>
 
               <section>
-                <label className="text-xs font-mono text-gray-400 mb-2 block flex items-center gap-2"><Cpu size={12}/> INTELLIGENCE ENGINE</label>
+                <label className="text-xs font-mono text-gray-400 mb-2 block flex items-center gap-2"><Cpu size={12}/> GROWTH ENGINE</label>
                 <div className="flex items-center justify-between p-3 bg-black/40 rounded border border-cyber-700">
                   <span className="text-sm text-gray-200">Auto-Analyze Snapshots</span>
                   <button 
@@ -595,11 +630,11 @@ const App: React.FC = () => {
                     <button 
                       onClick={() => setSettings({...settings, facingMode: 'environment'})}
                       className={`py-2 text-xs rounded border transition-all ${settings.facingMode === 'environment' ? 'bg-cyber-accent text-black border-transparent' : 'border-cyber-700 text-gray-400 hover:bg-cyber-700'}`}
-                    >TACTICAL (REAR)</button>
+                    >MACRO (REAR)</button>
                     <button 
                       onClick={() => setSettings({...settings, facingMode: 'user'})}
                       className={`py-2 text-xs rounded border transition-all ${settings.facingMode === 'user' ? 'bg-cyber-accent text-black border-transparent' : 'border-cyber-700 text-gray-400 hover:bg-cyber-700'}`}
-                    >OPERATOR (FRONT)</button>
+                    >SELFIE (FRONT)</button>
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     {['low', 'med', 'high'].map((res: any) => (
@@ -635,7 +670,7 @@ const App: React.FC = () => {
         
         {/* Left Col: Visuals */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="aspect-video w-full relative group bg-black rounded-lg border border-cyber-700 overflow-hidden shadow-[0_0_20px_rgba(0,242,255,0.05)]">
+          <div className={`aspect-video w-full relative group bg-black rounded-lg border overflow-hidden transition-all duration-700 ${getAuraClass(latestHealth)}`}>
             {playbackMode && selectedImage ? (
                <img src={selectedImage.dataUrl} className="w-full h-full object-cover" />
             ) : (
@@ -653,11 +688,21 @@ const App: React.FC = () => {
                     <div className="text-xs font-mono text-cyber-accent">CAM-01 // {settings.facingMode.toUpperCase()}</div>
                     <div className="text-lg font-mono text-white font-bold">{currentTime.toLocaleTimeString()}</div>
                  </div>
-                 {active && (
+                 {active && !playbackMode && (
                    <div className="flex items-center gap-2 bg-red-900/80 text-white px-3 py-1 rounded animate-pulse">
                      <div className="w-2 h-2 rounded-full bg-red-500"></div>
                      <span className="text-xs font-bold tracking-widest">REC</span>
                    </div>
+                 )}
+                 {playbackMode && (
+                    <div className="pointer-events-auto bg-black/60 backdrop-blur-sm p-1 rounded border border-cyber-accent/30 flex items-center gap-2">
+                        <button 
+                          onClick={() => setAutoAdvance(!autoAdvance)} 
+                          className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono border transition-all ${autoAdvance ? 'bg-cyber-accent/20 border-cyber-accent text-cyber-accent' : 'border-gray-600 text-gray-400'}`}
+                        >
+                            <Repeat size={10} /> AUTO-ADVANCE
+                        </button>
+                    </div>
                  )}
               </div>
               
@@ -666,7 +711,16 @@ const App: React.FC = () => {
                    LAT: {location?.lat.toFixed(4) || '---'} <br/>
                    LNG: {location?.lng.toFixed(4) || '---'}
                 </div>
-                <div className="w-8 h-8 border-r-2 border-b-2 border-cyber-accent/50"></div>
+                {latestHealth !== 'UNKNOWN' && !playbackMode && (
+                     <div className="flex items-center gap-2 bg-black/60 px-2 py-1 rounded backdrop-blur border border-white/10">
+                         {latestHealth === 'HEALTHY' && <CheckCircle size={14} className="text-cyber-accent"/>}
+                         {latestHealth === 'STRESSED' && <Activity size={14} className="text-yellow-500"/>}
+                         {latestHealth === 'CRITICAL' && <AlertTriangle size={14} className="text-red-500 animate-pulse"/>}
+                         <span className={`text-xs font-mono font-bold ${latestHealth === 'HEALTHY' ? 'text-cyber-accent' : latestHealth === 'CRITICAL' ? 'text-red-500' : 'text-yellow-500'}`}>
+                             SYSTEM: {latestHealth}
+                         </span>
+                     </div>
+                )}
               </div>
             </div>
 
@@ -674,13 +728,16 @@ const App: React.FC = () => {
                <div className="pointer-events-auto flex gap-2">
                   <button 
                     onClick={() => setActive(!active)}
-                    className={`flex items-center space-x-2 px-4 sm:px-6 py-2 sm:py-3 rounded-md font-bold transition-all ${active ? 'bg-cyber-warn text-white shadow-[0_0_15px_#ff0055]' : 'bg-cyber-accent text-black shadow-[0_0_15px_#00f2ff]'}`}
+                    className={`flex items-center space-x-2 px-4 sm:px-6 py-2 sm:py-3 rounded-md font-bold transition-all ${active ? 'bg-cyber-warn text-white shadow-[0_0_15px_#ef4444]' : 'bg-cyber-accent text-black shadow-[0_0_15px_#84cc16]'}`}
                   >
                     {active ? <><Square size={18} fill="currentColor"/> <span className="hidden sm:inline">STOP</span></> : <><Play size={18} fill="currentColor"/> <span className="hidden sm:inline">START</span></>}
                   </button>
                   <button 
                     onClick={() => {
-                       if (images.length > 0) setPlaybackMode(!playbackMode);
+                       if (images.length > 0) {
+                           setPlaybackMode(!playbackMode);
+                           if (!playbackMode) setAutoAdvance(true); // Default to auto when starting
+                       }
                     }}
                     disabled={images.length === 0}
                     className={`flex items-center space-x-2 px-4 py-2 rounded-md font-bold transition-all border ${playbackMode ? 'bg-cyber-success text-black border-transparent' : 'bg-black/50 text-white border-cyber-accent hover:bg-cyber-accent/10'}`}
@@ -722,7 +779,7 @@ const App: React.FC = () => {
         {/* Right Col: Intelligence Hub */}
         <div className="lg:col-span-1 flex flex-col h-[500px] lg:h-[calc(100vh-8rem)] sticky top-24">
            {selectedImage && !playbackMode ? (
-             <div className={`flex-1 bg-cyber-800 rounded-xl border overflow-hidden flex flex-col animate-in fade-in slide-in-from-right-4 relative transition-all duration-500 ${currentThreat === 'CRITICAL' ? 'border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)] ring-2 ring-red-500/20 animate-pulse' : 'border-cyber-700'}`}>
+             <div className={`flex-1 bg-cyber-800 rounded-xl border overflow-hidden flex flex-col animate-in fade-in slide-in-from-right-4 relative transition-all duration-500 ${currentStatus === 'CRITICAL' ? 'border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)] ring-2 ring-red-500/20 animate-pulse' : 'border-cyber-700'}`}>
                 <div className="p-3 border-b border-cyber-700 flex justify-between items-center bg-black/20">
                   <h3 className="font-mono text-cyber-accent flex items-center gap-2"><Terminal size={14}/> ANALYSIS MODE</h3>
                   <button onClick={() => setSelectedImage(null)} className="text-gray-400 hover:text-white text-xs">CLOSE X</button>
@@ -752,6 +809,13 @@ const App: React.FC = () => {
                       {formatTimestamp(selectedImage.timestamp)}
                     </div>
 
+                    {/* Low Confidence Warning */}
+                    {selectedImage.confidence && selectedImage.confidence < settings.minConfidenceThreshold && (
+                        <div className="absolute top-2 right-2 bg-yellow-500/90 text-black text-[9px] px-2 py-1 font-bold font-mono rounded flex items-center gap-1 shadow-lg pointer-events-none animate-bounce">
+                           <AlertCircle size={10} /> TENTATIVE
+                        </div>
+                    )}
+
                     {/* Zoom Hint */}
                      <div className="absolute bottom-2 right-2 flex flex-col items-end pointer-events-none">
                          <div className="bg-black/60 text-white text-[10px] px-1 font-mono rounded mb-1">
@@ -770,18 +834,20 @@ const App: React.FC = () => {
                        <div className="grid grid-cols-2 gap-2">
                           <div className="bg-black/20 p-2 rounded border border-cyber-700 flex flex-col">
                              <span className="text-[9px] text-gray-500 font-mono">STATUS</span>
-                             {renderThreatBadge(currentThreat)}
+                             {renderHealthBadge(currentStatus)}
                           </div>
                           <div className="bg-black/20 p-2 rounded border border-cyber-700 flex flex-col text-right">
                              <span className="text-[9px] text-gray-500 font-mono block">PRECISION</span>
-                             <span className="text-cyber-accent font-mono font-bold text-xs">{selectedImage.confidence || '--'}%</span>
+                             <span className={`font-mono font-bold text-xs ${selectedImage.confidence && selectedImage.confidence < settings.minConfidenceThreshold ? 'text-yellow-500' : 'text-cyber-accent'}`}>
+                                 {selectedImage.confidence || '--'}%
+                             </span>
                           </div>
                        </div>
 
-                       {selectedImage.sceneCategory && (
+                       {selectedImage.growthStage && (
                          <div className="bg-cyber-accent/5 p-2 rounded border border-cyber-accent/20 flex items-center justify-between">
-                            <span className="text-[9px] text-gray-400 font-mono uppercase tracking-widest">Scene Classification</span>
-                            <span className="text-[10px] text-cyber-accent font-bold uppercase">{selectedImage.sceneCategory}</span>
+                            <span className="text-[9px] text-gray-400 font-mono uppercase tracking-widest">Growth Stage</span>
+                            <span className="text-[10px] text-cyber-accent font-bold uppercase">{selectedImage.growthStage}</span>
                          </div>
                        )}
 
@@ -796,7 +862,7 @@ const App: React.FC = () => {
                        )}
 
                        <div className="bg-black/20 p-3 rounded border border-cyber-700">
-                         <h4 className="text-white font-bold text-xs mb-2 flex items-center gap-2"><BrainCircuit size={12} className="text-cyber-accent"/> INTELLIGENCE REPORT</h4>
+                         <h4 className="text-white font-bold text-xs mb-2 flex items-center gap-2"><BrainCircuit size={12} className="text-cyber-accent"/> BOTANIST REPORT</h4>
                          {renderAnalysisText(selectedImage.analysis)}
                        </div>
                        
@@ -810,23 +876,30 @@ const App: React.FC = () => {
                          </button>
 
                          {/* Context-Aware Buttons */}
-                         {currentThreat === 'CRITICAL' && (
+                         {currentStatus === 'CRITICAL' && (
                            <button 
-                             onClick={() => alert("EMERGENCY SIGNAL BROADCASTED TO AUTHORITIES")}
+                             onClick={() => alert("PEST CONTROL & DISEASE PROTOCOLS RECOMMENDED. ISOLATE PLANT.")}
                              className="w-full py-3 bg-red-600 hover:bg-red-500 text-white rounded text-sm font-bold flex justify-center items-center gap-2 shadow-lg shadow-red-600/20"
                            >
-                             <Siren size={16}/> NOTIFY AUTHORITIES
+                             <Siren size={16}/> PEST CONTROL
                            </button>
                          )}
 
-                         {(selectedImage.analysis.toLowerCase().includes('person') || selectedImage.analysis.toLowerCase().includes('human')) && (
+                         {(currentStatus === 'STRESSED') && (
                            <button 
+                             onClick={() => alert("CHECK WATER AND LIGHT LEVELS")}
+                             className="w-full py-3 bg-yellow-600 hover:bg-yellow-500 text-white rounded text-sm font-bold flex justify-center items-center gap-2 shadow-lg shadow-yellow-600/20"
+                           >
+                             <Droplet size={16}/> CARE REMINDER
+                           </button>
+                         )}
+
+                         <button 
                              onClick={() => setLiveMode(true)}
                              className="w-full py-3 bg-cyber-success/20 border border-cyber-success text-cyber-success hover:bg-cyber-success hover:text-black rounded text-sm font-bold flex justify-center items-center gap-2 transition-all"
                            >
-                             <Radio size={16}/> INTERCEPT COMMS (LIVE)
+                             <Radio size={16}/> ASK DR. GAIA
                            </button>
-                         )}
                        </div>
                     </div>
                   ) : (
@@ -836,7 +909,7 @@ const App: React.FC = () => {
                       className="w-full py-4 bg-cyber-700 hover:bg-cyber-600 rounded text-sm text-white flex justify-center items-center gap-2 border border-cyber-accent/20 hover:border-cyber-accent"
                     >
                       {isProcessing ? <Zap className="animate-pulse" size={16}/> : <BrainCircuit size={16}/>}
-                      {isProcessing ? 'SCANNING SECTOR...' : 'INITIATE DEEP SCAN'}
+                      {isProcessing ? 'SCANNING PLANT...' : 'ANALYZE PLANT'}
                     </button>
                   )}
                 </div>
@@ -857,9 +930,9 @@ const App: React.FC = () => {
                <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-black/20">
                  {chatMessages.length === 0 && (
                    <div className="text-center text-gray-600 mt-10">
-                     <BrainCircuit className="mx-auto mb-2 opacity-50" size={32} />
-                     <p className="text-sm">Sentinel is listening.</p>
-                     <p className="text-xs mt-2">Try: "Is the area safe?" or use "GEN REPORT".</p>
+                     <Sprout className="mx-auto mb-2 opacity-50" size={32} />
+                     <p className="text-sm">Gaia is listening.</p>
+                     <p className="text-xs mt-2">Try: "Is the plant healthy?" or use "GEN REPORT".</p>
                    </div>
                  )}
                  {chatMessages.map(msg => (
@@ -916,7 +989,7 @@ const App: React.FC = () => {
                       type="text" 
                       value={userInput}
                       onChange={(e) => setUserInput(e.target.value)}
-                      placeholder="Enter command..."
+                      placeholder="Ask Gaia..."
                       className="w-full bg-black border border-cyber-700 rounded-md py-2 pl-3 pr-10 text-sm text-white focus:outline-none focus:border-cyber-accent transition-colors"
                     />
                     <button type="submit" disabled={isProcessing} className="absolute right-2 top-2 text-cyber-accent hover:text-white disabled:opacity-50">

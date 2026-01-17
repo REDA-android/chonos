@@ -1,6 +1,6 @@
 import React from 'react';
 import { CapturedImage } from '../types';
-import { Clock, Eye, AlertTriangle, ShieldCheck, Activity } from 'lucide-react';
+import { Clock, Eye, AlertTriangle, Leaf, Sprout, Flower, Sun, HelpCircle } from 'lucide-react';
 
 interface TimelineProps {
   images: CapturedImage[];
@@ -8,19 +8,29 @@ interface TimelineProps {
 }
 
 const Timeline: React.FC<TimelineProps> = ({ images, onSelect }) => {
-  const getThreatColor = (img: CapturedImage) => {
+  const getHealthColor = (img: CapturedImage) => {
     // Priority: Explicit Metadata -> Text Analysis -> Default
-    if (img.threatLevel === 'CRITICAL') return 'border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.4)]';
-    if (img.threatLevel === 'CAUTION') return 'border-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.4)]';
-    if (img.threatLevel === 'SAFE') return 'border-cyber-success shadow-[0_0_10px_rgba(0,255,157,0.4)]';
+    if (img.healthStatus === 'CRITICAL') return 'border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.4)]';
+    if (img.healthStatus === 'STRESSED') return 'border-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.4)]';
+    if (img.healthStatus === 'HEALTHY') return 'border-cyber-accent shadow-[0_0_10px_rgba(132,204,22,0.4)]';
 
     if (!img.analysis) return 'border-cyber-700';
     
     // Fallback legacy analysis
     const t = img.analysis.toLowerCase();
-    if (t.includes('intruder') || t.includes('danger') || t.includes('weapon') || t.includes('fire') || t.includes('smoke') || t.includes('suspicious')) return 'border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.4)]';
-    if (t.includes('person') || t.includes('human') || t.includes('movement') || t.includes('change') || t.includes('vehicle')) return 'border-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.4)]';
-    return 'border-cyber-success shadow-[0_0_10px_rgba(0,255,157,0.4)]';
+    if (t.includes('dead') || t.includes('disease') || t.includes('pest') || t.includes('rot') || t.includes('critical')) return 'border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.4)]';
+    if (t.includes('wilt') || t.includes('yellow') || t.includes('dry') || t.includes('spot')) return 'border-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.4)]';
+    return 'border-cyber-accent shadow-[0_0_10px_rgba(132,204,22,0.4)]';
+  };
+
+  const getStageIcon = (stage?: string) => {
+    if (!stage) return null;
+    const s = stage.toLowerCase();
+    if (s.includes('germinat') || s.includes('seed') || s.includes('sprout')) return <Sprout size={12} className="text-cyber-accent" />;
+    if (s.includes('flower') || s.includes('bloom') || s.includes('bud')) return <Flower size={12} className="text-pink-400" />;
+    if (s.includes('fruit') || s.includes('harvest') || s.includes('mature')) return <Sun size={12} className="text-orange-400" />;
+    if (s.includes('veg') || s.includes('leaf')) return <Leaf size={12} className="text-green-400" />;
+    return <HelpCircle size={12} className="text-gray-400" />;
   };
 
   if (images.length === 0) {
@@ -39,26 +49,22 @@ const Timeline: React.FC<TimelineProps> = ({ images, onSelect }) => {
           <div 
             key={img.id} 
             onClick={() => onSelect(img)}
-            className={`group relative cursor-pointer w-48 h-32 rounded-lg overflow-hidden border-2 transition-all hover:scale-105 ${getThreatColor(img)}`}
+            className={`group relative cursor-pointer w-48 h-32 rounded-lg overflow-hidden border-2 transition-all hover:scale-105 ${getHealthColor(img)}`}
           >
             <img src={img.dataUrl} alt="Snapshot" className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-black/40 group-hover:bg-black/0 transition-colors"></div>
             
             {/* Analysis Available Indicator */}
             {img.analysis && (
-               <div className="absolute top-2 right-2 bg-cyber-accent text-black rounded-full p-1 shadow-[0_0_10px_#00f2ff] animate-pulse z-10">
+               <div className="absolute top-2 right-2 bg-cyber-accent text-black rounded-full p-1 shadow-[0_0_10px_#84cc16] animate-pulse z-10">
                  <Eye size={10} />
                </div>
             )}
 
-            {/* Event Tags */}
-            {img.eventTags && img.eventTags.length > 0 && (
-              <div className="absolute top-2 left-2 flex flex-wrap gap-1 max-w-[80%] pointer-events-none">
-                {img.eventTags.slice(0, 2).map((tag, idx) => (
-                  <span key={idx} className="text-[7px] bg-black/80 text-cyber-accent px-1 py-0.5 rounded border border-cyber-accent/30 font-mono uppercase truncate">
-                    {tag}
-                  </span>
-                ))}
+            {/* Growth Stage Icon */}
+            {img.growthStage && (
+              <div className="absolute top-2 left-2 bg-black/80 p-1 rounded-full border border-gray-600 shadow-md">
+                {getStageIcon(img.growthStage)}
               </div>
             )}
 

@@ -4,9 +4,9 @@ export interface CapturedImage {
   dataUrl: string;
   analysis?: string;
   confidence?: number;
-  sceneCategory?: string;
+  growthStage?: string;
   eventTags?: string[];
-  threatLevel?: 'SAFE' | 'CAUTION' | 'CRITICAL';
+  healthStatus?: 'HEALTHY' | 'STRESSED' | 'CRITICAL';
 }
 
 export enum AppMode {
@@ -33,4 +33,5 @@ export interface MonitorSettings {
   resolution: 'low' | 'med' | 'high';
   playbackFps: number;
   timestampPrecision: 'date' | 'time' | 'both';
+  minConfidenceThreshold: number;
 }
