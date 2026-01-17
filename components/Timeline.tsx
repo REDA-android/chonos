@@ -8,9 +8,16 @@ interface TimelineProps {
 }
 
 const Timeline: React.FC<TimelineProps> = ({ images, onSelect }) => {
-  const getThreatColor = (analysis?: string) => {
-    if (!analysis) return 'border-cyber-700';
-    const t = analysis.toLowerCase();
+  const getThreatColor = (img: CapturedImage) => {
+    // Priority: Explicit Metadata -> Text Analysis -> Default
+    if (img.threatLevel === 'CRITICAL') return 'border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.4)]';
+    if (img.threatLevel === 'CAUTION') return 'border-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.4)]';
+    if (img.threatLevel === 'SAFE') return 'border-cyber-success shadow-[0_0_10px_rgba(0,255,157,0.4)]';
+
+    if (!img.analysis) return 'border-cyber-700';
+    
+    // Fallback legacy analysis
+    const t = img.analysis.toLowerCase();
     if (t.includes('intruder') || t.includes('danger') || t.includes('weapon') || t.includes('fire') || t.includes('smoke') || t.includes('suspicious')) return 'border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.4)]';
     if (t.includes('person') || t.includes('human') || t.includes('movement') || t.includes('change') || t.includes('vehicle')) return 'border-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.4)]';
     return 'border-cyber-success shadow-[0_0_10px_rgba(0,255,157,0.4)]';
@@ -32,7 +39,7 @@ const Timeline: React.FC<TimelineProps> = ({ images, onSelect }) => {
           <div 
             key={img.id} 
             onClick={() => onSelect(img)}
-            className={`group relative cursor-pointer w-48 h-32 rounded-lg overflow-hidden border-2 transition-all hover:scale-105 ${getThreatColor(img.analysis)}`}
+            className={`group relative cursor-pointer w-48 h-32 rounded-lg overflow-hidden border-2 transition-all hover:scale-105 ${getThreatColor(img)}`}
           >
             <img src={img.dataUrl} alt="Snapshot" className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-black/40 group-hover:bg-black/0 transition-colors"></div>

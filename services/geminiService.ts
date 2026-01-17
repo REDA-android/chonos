@@ -10,7 +10,7 @@ const API_KEY = process.env.API_KEY || '';
 
 // --- Configuration Constants ---
 const MODEL_CHAT_PRO = 'gemini-3-pro-preview';
-const MODEL_FAST_LITE = 'gemini-2.5-flash-lite'; // Use common alias if needed, mapping to full name handled by SDK usually, but sticking to guidelines
+const MODEL_FAST_LITE = 'gemini-2.5-flash-lite';
 const MODEL_SEARCH = 'gemini-3-flash-preview';
 const MODEL_MAPS = 'gemini-2.5-flash';
 const MODEL_VISION = 'gemini-3-pro-preview';
@@ -35,9 +35,6 @@ const captureSnapshotTool: FunctionDeclaration = {
 
 // --- API Functions ---
 
-/**
- * General Chat with Tool Selection based on user intent (simplified logic)
- */
 export const sendMessage = async (
   history: { role: string; text: string }[], 
   newMessage: string,
@@ -54,7 +51,6 @@ export const sendMessage = async (
   if (useThinking) {
     modelName = MODEL_CHAT_PRO;
     config.thinkingConfig = { thinkingBudget: 32768 };
-    // DO NOT set maxOutputTokens when using thinking
   } else if (useSearch) {
     modelName = MODEL_SEARCH;
     config.tools = [{ googleSearch: {} }];
@@ -72,16 +68,9 @@ export const sendMessage = async (
       };
     }
   } else {
-    // Default fallback to Lite for very simple queries if we wanted, 
-    // but Pro is requested for "Chatbot"
     modelName = MODEL_CHAT_PRO;
   }
 
-  // Formatting history for the API
-  // Note: For simple single-turn or stateless calls we use generateContent.
-  // For chat, we use chats.create. 
-  
-  // Construct a chat session
   const chat = ai.chats.create({
     model: modelName,
     config: {
@@ -102,30 +91,26 @@ export const sendMessage = async (
   };
 };
 
-/**
- * Image Analysis
- */
-export const analyzeImage = async (base64Data: string, prompt: string = "Describe what you see in this image in detail. Identify any potential security concerns or interesting changes.") => {
+export const analyzeImage = async (base64Data: string, prompt: string) => {
   const ai = getAI();
-  // Remove header if present (data:image/jpeg;base64,)
-  const cleanBase64 = base64Data.split(',')[1];
-
-  const response = await ai.models.generateContent({
-    model: MODEL_VISION,
-    contents: {
-      parts: [
-        { inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } },
-        { text: prompt }
-      ]
-    }
-  });
-
-  return response.text;
+  try {
+    const cleanBase64 = base64Data.split(',')[1];
+    const response = await ai.models.generateContent({
+      model: MODEL_VISION,
+      contents: {
+        parts: [
+          { inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } },
+          { text: prompt }
+        ]
+      }
+    });
+    return response.text;
+  } catch (error) {
+    console.error("Analysis Error:", error);
+    throw new Error("Optical Analysis Failed. Check connection.");
+  }
 };
 
-/**
- * Generate a tactical report from logs
- */
 export const generateSentinelReport = async (logs: string[]) => {
   const ai = getAI();
   const prompt = `
@@ -145,21 +130,15 @@ export const generateSentinelReport = async (logs: string[]) => {
   return response.text;
 };
 
-/**
- * Fast Summary / Low Latency
- */
 export const getFastResponse = async (text: string) => {
   const ai = getAI();
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash-lite-latest', // Explicit mapping for 'flash lite'
+    model: MODEL_FAST_LITE,
     contents: text
   });
   return response.text;
 };
 
-/**
- * Text to Speech
- */
 export const generateSpeech = async (text: string) => {
   const ai = getAI();
   const response = await ai.models.generateContent({
@@ -169,19 +148,18 @@ export const generateSpeech = async (text: string) => {
       responseModalities: [Modality.AUDIO],
       speechConfig: {
         voiceConfig: {
-          prebuiltVoiceConfig: { voiceName: 'Fenrir' }, // Fenrir sounds deeper/sentinel-like
+          prebuiltVoiceConfig: { voiceName: 'Fenrir' },
         },
       },
     },
   });
 
   const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  return base64Audio; // Returns base64 PCM/Audio
+  return base64Audio;
 };
 
 // --- Live API Helpers ---
 
-// Audio Encoding/Decoding Utils
 export function decodeAudio(base64: string) {
   const binaryString = atob(base64);
   const len = binaryString.length;
@@ -232,10 +210,24 @@ export function createPcmBlob(data: Float32Array): any {
   };
 }
 
+// Convert blob to base64
+export function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, _) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result as string;
+      // Remove data url prefix
+      resolve(result.split(',')[1]);
+    };
+    reader.readAsDataURL(blob);
+  });
+}
+
 export const connectToLiveAPI = async (
   onAudioData: (base64: string) => void,
   onClose: () => void,
   onError: (err: any) => void,
+  onTranscript: (text: string, isUser: boolean) => void,
   onCaptureTrigger?: () => void
 ) => {
   const ai = getAI();
@@ -251,6 +243,14 @@ export const connectToLiveAPI = async (
           onAudioData(base64Audio);
         }
 
+        // Handle Transcriptions
+        if (message.serverContent?.outputTranscription?.text) {
+           onTranscript(message.serverContent.outputTranscription.text, false);
+        }
+        if (message.serverContent?.inputTranscription?.text) {
+           onTranscript(message.serverContent.inputTranscription.text, true);
+        }
+
         // Handle Tool Calls
         if (message.toolCall) {
           for (const fc of message.toolCall.functionCalls) {
@@ -258,7 +258,6 @@ export const connectToLiveAPI = async (
               console.log('Voice Command: Capture Snapshot Triggered');
               if (onCaptureTrigger) onCaptureTrigger();
               
-              // Send response back
               const session = await sessionPromise;
               session.sendToolResponse({
                 functionResponses: [{
@@ -276,10 +275,12 @@ export const connectToLiveAPI = async (
     },
     config: {
       responseModalities: [Modality.AUDIO],
+      inputAudioTranscription: {},
+      outputAudioTranscription: {},
       speechConfig: {
         voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } }
       },
-      systemInstruction: "You are Chronos, a helpful and observant AI assistant. You can capture snapshots when asked. If the user says 'take a picture', 'capture', or 'scan', call the captureSnapshot tool.",
+      systemInstruction: "You are Chronos, a helpful and observant AI assistant. You can see the user's video feed. Describe what you see if asked. You can capture snapshots. If the user says 'take a picture', 'capture', or 'scan', call the captureSnapshot tool.",
       tools: [{ functionDeclarations: [captureSnapshotTool] }]
     }
   });

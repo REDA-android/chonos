@@ -22,7 +22,7 @@ import {
   Globe, 
   BrainCircuit, 
   Volume2,
-  Clock,
+  Clock, 
   Zap,
   Eye,
   FileText,
@@ -42,7 +42,11 @@ import {
   Siren,
   Radio,
   Tag,
-  Calendar
+  Calendar,
+  ZoomIn,
+  ZoomOut,
+  Maximize,
+  Video
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -76,6 +80,12 @@ const App: React.FC = () => {
   const [useThinking, setUseThinking] = useState(false);
   const [useSearch, setUseSearch] = useState(false);
   const [useMaps, setUseMaps] = useState(false);
+
+  // Static Image Zoom State
+  const [staticZoom, setStaticZoom] = useState(1);
+  const [staticPan, setStaticPan] = useState({ x: 0, y: 0 });
+  const [isStaticDragging, setIsStaticDragging] = useState(false);
+  const [staticDragStart, setStaticDragStart] = useState({ x: 0, y: 0 });
 
   // Refs
   const cameraRef = useRef<CameraHandle>(null);
@@ -115,12 +125,31 @@ const App: React.FC = () => {
     const confidence = text.match(/\[CONFIDENCE:\s*(\d+)%?\]/i);
     const category = text.match(/\[CATEGORY:\s*([^\]]+)\]/i);
     const tags = text.match(/\[TAGS:\s*([^\]]+)\]/i);
+    const threat = text.match(/\[THREAT:\s*(SAFE|CAUTION|CRITICAL)\]/i);
 
     return {
       confidence: confidence ? parseInt(confidence[1]) : undefined,
       sceneCategory: category ? category[1].trim() : undefined,
-      eventTags: tags ? tags[1].split(',').map(t => t.trim()) : undefined
+      eventTags: tags ? tags[1].split(',').map(t => t.trim()) : undefined,
+      threatLevel: threat ? (threat[1].toUpperCase() as 'SAFE'|'CAUTION'|'CRITICAL') : undefined
     };
+  };
+
+  const addLogToChat = (analysis: string, timestamp: number) => {
+    // Extract summary (first sentence or up to 15 words)
+    let summary = analysis.split('.')[0];
+    if (summary.split(' ').length > 15) {
+        summary = summary.split(' ').slice(0, 15).join(' ') + '...';
+    }
+    
+    const timeStr = new Date(timestamp).toLocaleTimeString();
+    
+    setChatMessages(prev => [...prev, {
+        id: Date.now().toString() + "-log",
+        role: 'system',
+        text: `LOG [${timeStr}]: ${summary}`,
+        timestamp: Date.now()
+    }]);
   };
 
   // --- Effects ---
@@ -184,6 +213,12 @@ const App: React.FC = () => {
     return () => clearInterval(playbackRef.current);
   }, [playbackMode, images, settings.playbackFps]);
 
+  // Reset zoom when selecting a new image
+  useEffect(() => {
+     setStaticZoom(1);
+     setStaticPan({x:0, y:0});
+  }, [selectedImage]);
+
   // --- Core Functions ---
 
   const captureAndProcess = async () => {
@@ -200,19 +235,60 @@ const App: React.FC = () => {
 
         if (settings.autoAnalyze) {
           try {
-            const prompt = `Analyze this security snapshot. Focus on critical changes or threats.
-            Identify the scene category (indoors/outdoors, daytime/nighttime).
-            Identify events (e.g., person detected, door opened, package delivered, unusual movement).
-            End your report with structured metadata: [CATEGORY: category] [TAGS: tag1, tag2] [CONFIDENCE: X%]`;
+            const prompt = `Analyze this security snapshot.
+            1. Provide a VERY CONCISE SUMMARY (max 15 words) of the key observation.
+            2. Determine Threat Level: SAFE (routine/empty), CAUTION (person/vehicle/change), or CRITICAL (weapon/fire/intruder).
+            3. Identify Scene Category (e.g., Indoors/Outdoors, Day/Night).
+            4. Identify Event Tags (e.g., person detected, door opened).
+            
+            Format the end of your response with these exact tags:
+            [THREAT: LEVEL]
+            [CATEGORY: category]
+            [TAGS: tag1, tag2]
+            [CONFIDENCE: X%]`;
+            
             const analysis = await analyzeImage(dataUrl, prompt);
             const metadata = parseMetaData(analysis);
+            
             setImages(prev => prev.map(img => img.id === newImage.id ? { ...img, analysis, ...metadata } : img));
             setSelectedImage(prev => prev && prev.id === newImage.id ? { ...prev, analysis, ...metadata } : prev);
+            
+            // Auto-Log to Chat
+            addLogToChat(analysis, newImage.timestamp);
+
           } catch (e) {
             console.error("Auto analysis failed", e);
           }
         }
       }
+    }
+  };
+
+  const performManualAnalysis = async (img: CapturedImage) => {
+    setIsProcessing(true);
+    try {
+        const prompt = `Analyze this security snapshot.
+        1. Provide a VERY CONCISE SUMMARY (max 15 words) of the key observation.
+        2. Determine Threat Level: SAFE (routine/empty), CAUTION (person/vehicle/change), or CRITICAL (weapon/fire/intruder).
+        3. Identify Scene Category (e.g., Indoors/Outdoors, Day/Night).
+        4. Identify Event Tags (e.g., person detected, door opened).
+        
+        Format the end of your response with these exact tags:
+        [THREAT: LEVEL]
+        [CATEGORY: category]
+        [TAGS: tag1, tag2]
+        [CONFIDENCE: X%]`;
+        
+        const ans = await analyzeImage(img.dataUrl, prompt);
+        const metadata = parseMetaData(ans);
+        setImages(prev => prev.map(i => i.id === img.id ? { ...i, analysis: ans, ...metadata } : i));
+        setSelectedImage(prev => prev ? {...prev, analysis: ans, ...metadata} : null);
+        
+        addLogToChat(ans, img.timestamp);
+    } catch (e) {
+        console.error("Manual Analysis Failed", e);
+    } finally {
+        setIsProcessing(false);
     }
   };
 
@@ -324,6 +400,43 @@ const App: React.FC = () => {
     }
   };
 
+  const handleLiveTranscript = (text: string, isUser: boolean) => {
+      setChatMessages(prev => {
+          const lastMsg = prev[prev.length - 1];
+          // Simple debouncing/appending to avoid chat spam
+          if (lastMsg && lastMsg.role === (isUser ? 'user' : 'model') && (Date.now() - lastMsg.timestamp < 3000)) {
+               // Append to previous message if very recent
+               return [...prev.slice(0, -1), { ...lastMsg, text: lastMsg.text + " " + text }];
+          }
+          return [...prev, {
+              id: Date.now().toString(),
+              role: isUser ? 'user' : 'model',
+              text: isUser ? `(Voice) ${text}` : `(Live) ${text}`,
+              timestamp: Date.now()
+          }];
+      });
+  };
+
+  // Zoom Handlers for Static Image
+  const handleStaticWheel = (e: React.WheelEvent) => {
+    e.stopPropagation();
+    const delta = -e.deltaY * 0.001;
+    setStaticZoom(z => Math.min(Math.max(1, z + delta), 5));
+  };
+  const handleStaticMouseDown = (e: React.MouseEvent) => {
+      if (staticZoom > 1) {
+          setIsStaticDragging(true);
+          setStaticDragStart({ x: e.clientX - staticPan.x, y: e.clientY - staticPan.y });
+      }
+  };
+  const handleStaticMouseMove = (e: React.MouseEvent) => {
+      if (isStaticDragging && staticZoom > 1) {
+          setStaticPan({ x: e.clientX - staticDragStart.x, y: e.clientY - staticDragStart.y });
+      }
+  };
+  const handleStaticMouseUp = () => setIsStaticDragging(false);
+
+  // ... (rest of rendering functions same as before)
   const renderThreatBadge = (level: string) => {
     switch(level) {
       case 'CRITICAL': 
@@ -374,7 +487,7 @@ const App: React.FC = () => {
     );
   };
 
-  const currentThreat = selectedImage ? getThreatLevel(selectedImage.analysis) : 'SAFE';
+  const currentThreat = selectedImage?.threatLevel || (selectedImage?.analysis ? getThreatLevel(selectedImage.analysis) : 'SAFE');
 
   return (
     <div className="min-h-screen bg-cyber-900 text-gray-200 font-sans selection:bg-cyber-accent selection:text-black">
@@ -417,10 +530,10 @@ const App: React.FC = () => {
              </button>
              <button 
                 onClick={() => setLiveMode(true)}
-                className="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-cyber-700 hover:bg-cyber-accent hover:text-black transition-colors"
+                className="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-cyber-700 hover:bg-cyber-accent hover:text-black transition-colors border border-cyber-accent/30 shadow-[0_0_10px_rgba(0,242,255,0.2)]"
              >
-                <Mic size={16} />
-                <span className="text-sm font-semibold hidden sm:inline">VOICE LINK</span>
+                <Video size={16} />
+                <span className="text-sm font-semibold hidden sm:inline">VIDEO LINK</span>
              </button>
           </div>
         </div>
@@ -534,7 +647,7 @@ const App: React.FC = () => {
               />
             )}
             
-            <div className="absolute inset-0 pointer-events-none p-4 flex flex-col justify-between">
+            <div className="absolute inset-0 pointer-events-none p-4 flex flex-col justify-between z-10">
               <div className="flex justify-between items-start">
                  <div className="bg-black/60 backdrop-blur-sm p-2 rounded border-l-2 border-cyber-accent">
                     <div className="text-xs font-mono text-cyber-accent">CAM-01 // {settings.facingMode.toUpperCase()}</div>
@@ -615,17 +728,41 @@ const App: React.FC = () => {
                   <button onClick={() => setSelectedImage(null)} className="text-gray-400 hover:text-white text-xs">CLOSE X</button>
                 </div>
                 <div className="p-4 flex-1 overflow-y-auto custom-scrollbar">
-                  <div className="relative group/img overflow-hidden rounded-lg mb-4 border border-gray-700">
-                    <img src={selectedImage.dataUrl} className="w-full transition-transform duration-500 group-hover/img:scale-105" alt="Analysis Target" />
+                  
+                  {/* Interactive Image Container */}
+                  <div 
+                     className="relative group/img overflow-hidden rounded-lg mb-4 border border-gray-700 h-48 cursor-grab active:cursor-grabbing bg-black"
+                     onWheel={handleStaticWheel}
+                     onMouseDown={handleStaticMouseDown}
+                     onMouseMove={handleStaticMouseMove}
+                     onMouseUp={handleStaticMouseUp}
+                     onMouseLeave={handleStaticMouseUp}
+                  >
+                    <div 
+                        className="w-full h-full transition-transform duration-100 ease-out origin-center"
+                        style={{ 
+                            transform: `scale(${staticZoom}) translate(${staticPan.x / staticZoom}px, ${staticPan.y / staticZoom}px)` 
+                        }}
+                    >
+                        <img src={selectedImage.dataUrl} className="w-full h-full object-contain pointer-events-none" alt="Analysis Target" />
+                    </div>
                     
                     {/* Timestamp Overlay */}
-                    <div className="absolute top-2 left-2 bg-black/70 text-cyber-accent text-[9px] px-2 py-1 font-mono rounded border border-cyber-accent/30 backdrop-blur-md">
+                    <div className="absolute top-2 left-2 bg-black/70 text-cyber-accent text-[9px] px-2 py-1 font-mono rounded border border-cyber-accent/30 backdrop-blur-md pointer-events-none">
                       {formatTimestamp(selectedImage.timestamp)}
                     </div>
 
-                    <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-1 font-mono rounded">
-                      ID-{selectedImage.id.slice(-4)}
-                    </div>
+                    {/* Zoom Hint */}
+                     <div className="absolute bottom-2 right-2 flex flex-col items-end pointer-events-none">
+                         <div className="bg-black/60 text-white text-[10px] px-1 font-mono rounded mb-1">
+                            ID-{selectedImage.id.slice(-4)}
+                         </div>
+                         {staticZoom > 1 && (
+                             <div className="text-[9px] text-cyber-accent bg-black/80 px-1 rounded border border-cyber-accent/20">
+                                 {staticZoom.toFixed(1)}x
+                             </div>
+                         )}
+                     </div>
                   </div>
                   
                   {selectedImage.analysis ? (
@@ -633,7 +770,7 @@ const App: React.FC = () => {
                        <div className="grid grid-cols-2 gap-2">
                           <div className="bg-black/20 p-2 rounded border border-cyber-700 flex flex-col">
                              <span className="text-[9px] text-gray-500 font-mono">STATUS</span>
-                             {renderThreatBadge(getThreatLevel(selectedImage.analysis))}
+                             {renderThreatBadge(currentThreat)}
                           </div>
                           <div className="bg-black/20 p-2 rounded border border-cyber-700 flex flex-col text-right">
                              <span className="text-[9px] text-gray-500 font-mono block">PRECISION</span>
@@ -694,19 +831,7 @@ const App: React.FC = () => {
                     </div>
                   ) : (
                     <button 
-                      onClick={async () => {
-                        if(!selectedImage) return;
-                        setIsProcessing(true);
-                        const prompt = `Analyze this security snapshot. Focus on critical changes or threats.
-                        Identify the scene category (indoors/outdoors, daytime/nighttime).
-                        Identify events (e.g., person detected, door opened, package delivered, unusual movement).
-                        End your report with structured metadata: [CATEGORY: category] [TAGS: tag1, tag2] [CONFIDENCE: X%]`;
-                        const ans = await analyzeImage(selectedImage.dataUrl, prompt);
-                        const metadata = parseMetaData(ans);
-                        setImages(prev => prev.map(img => img.id === selectedImage.id ? { ...img, analysis: ans, ...metadata } : img));
-                        setSelectedImage(prev => prev ? {...prev, analysis: ans, ...metadata} : null);
-                        setIsProcessing(false);
-                      }}
+                      onClick={() => { if(selectedImage) performManualAnalysis(selectedImage); }}
                       disabled={isProcessing}
                       className="w-full py-4 bg-cyber-700 hover:bg-cyber-600 rounded text-sm text-white flex justify-center items-center gap-2 border border-cyber-accent/20 hover:border-cyber-accent"
                     >
@@ -739,7 +864,11 @@ const App: React.FC = () => {
                  )}
                  {chatMessages.map(msg => (
                    <div key={msg.id} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                      <div className={`max-w-[85%] rounded-lg p-3 text-sm ${msg.role === 'user' ? 'bg-cyber-700 text-white' : 'bg-black/40 border border-cyber-700/50 text-gray-300'}`}>
+                      <div className={`max-w-[85%] rounded-lg p-3 text-sm ${
+                            msg.role === 'user' ? 'bg-cyber-700 text-white' : 
+                            msg.role === 'system' ? 'bg-cyber-accent/10 border border-cyber-accent/30 text-cyber-accent font-mono text-xs' :
+                            'bg-black/40 border border-cyber-700/50 text-gray-300'
+                          }`}>
                         {msg.isThinking && <div className="text-xs text-cyber-accent mb-1 font-mono flex items-center gap-1"><BrainCircuit size={10}/> THINKING PROCESS...</div>}
                         <div className="whitespace-pre-wrap">{msg.text}</div>
                       </div>
@@ -800,7 +929,7 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {liveMode && <LiveAudio onClose={() => setLiveMode(false)} onCapture={handleManualCapture} />}
+      {liveMode && <LiveAudio onClose={() => setLiveMode(false)} onCapture={handleManualCapture} onTranscript={handleLiveTranscript} />}
     </div>
   );
 };

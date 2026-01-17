@@ -6,6 +6,7 @@ export interface CapturedImage {
   confidence?: number;
   sceneCategory?: string;
   eventTags?: string[];
+  threatLevel?: 'SAFE' | 'CAUTION' | 'CRITICAL';
 }
 
 export enum AppMode {
