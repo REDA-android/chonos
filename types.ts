@@ -3,6 +3,9 @@ export interface CapturedImage {
   timestamp: number;
   dataUrl: string;
   analysis?: string;
+  confidence?: number;
+  sceneCategory?: string;
+  eventTags?: string[];
 }
 
 export enum AppMode {
@@ -25,4 +28,8 @@ export interface MonitorSettings {
   intervalHours: number;
   autoAnalyze: boolean;
   wakeLockActive: boolean;
+  facingMode: 'user' | 'environment';
+  resolution: 'low' | 'med' | 'high';
+  playbackFps: number;
+  timestampPrecision: 'date' | 'time' | 'both';
 }

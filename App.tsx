@@ -32,7 +32,17 @@ import {
   AlertTriangle,
   CheckCircle,
   Activity,
-  Terminal
+  Terminal,
+  Settings,
+  Camera,
+  FastForward,
+  Cpu,
+  ChevronDown,
+  ChevronUp,
+  Siren,
+  Radio,
+  Tag,
+  Calendar
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -42,23 +52,27 @@ const App: React.FC = () => {
   const [settings, setSettings] = useState<MonitorSettings>({
     intervalHours: 1.5,
     autoAnalyze: false,
-    wakeLockActive: true
+    wakeLockActive: true,
+    facingMode: 'environment',
+    resolution: 'med',
+    playbackFps: 4,
+    timestampPrecision: 'both'
   });
   const [selectedImage, setSelectedImage] = useState<CapturedImage | null>(null);
   const [liveMode, setLiveMode] = useState(false);
   const [playbackMode, setPlaybackMode] = useState(false);
   const [stealthMode, setStealthMode] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [expandedAnalysis, setExpandedAnalysis] = useState(false);
   
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [userInput, setUserInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false); // Track audio state
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const [location, setLocation] = useState<{lat: number, lng: number} | undefined>(undefined);
   
-  // HUD State
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  // Feature Toggles for Chat
   const [useThinking, setUseThinking] = useState(false);
   const [useSearch, setUseSearch] = useState(false);
   const [useMaps, setUseMaps] = useState(false);
@@ -74,9 +88,6 @@ const App: React.FC = () => {
   const playAudio = async (base64Audio: string) => {
     try {
       setIsSpeaking(true);
-      
-      // Use helper from service to decode raw PCM (24kHz, 1 channel)
-      // Native audioContext.decodeAudioData fails because there are no WAV/MP3 headers in GenAI output
       const audioBytes = decodeAudio(base64Audio);
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       const decodedBuffer = await decodeAudioData(audioBytes, audioContext, 24000, 1);
@@ -100,15 +111,25 @@ const App: React.FC = () => {
     return 'SAFE';
   };
 
+  const parseMetaData = (text: string) => {
+    const confidence = text.match(/\[CONFIDENCE:\s*(\d+)%?\]/i);
+    const category = text.match(/\[CATEGORY:\s*([^\]]+)\]/i);
+    const tags = text.match(/\[TAGS:\s*([^\]]+)\]/i);
+
+    return {
+      confidence: confidence ? parseInt(confidence[1]) : undefined,
+      sceneCategory: category ? category[1].trim() : undefined,
+      eventTags: tags ? tags[1].split(',').map(t => t.trim()) : undefined
+    };
+  };
+
   // --- Effects ---
 
-  // Timer for HUD
   useEffect(() => {
     timerRef.current = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timerRef.current);
   }, []);
 
-  // Location Setup
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -118,7 +139,6 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Wake Lock Logic
   const requestWakeLock = async () => {
     if ('wakeLock' in navigator && settings.wakeLockActive) {
       try {
@@ -134,7 +154,6 @@ const App: React.FC = () => {
       requestWakeLock();
       const intervalMs = settings.intervalHours * 60 * 60 * 1000;
       
-      // Initial Capture if empty
       if (images.length === 0) {
         setTimeout(captureAndProcess, 1000);
       }
@@ -151,19 +170,19 @@ const App: React.FC = () => {
     };
   }, [active, settings.intervalHours]);
 
-  // Playback Logic
   useEffect(() => {
     if (playbackMode && images.length > 0) {
       let idx = 0;
+      const playbackInterval = 1000 / settings.playbackFps;
       playbackRef.current = setInterval(() => {
         setSelectedImage(images[idx]);
         idx = (idx + 1) % images.length;
-      }, 500); // 2 FPS
+      }, playbackInterval);
     } else {
       clearInterval(playbackRef.current);
     }
     return () => clearInterval(playbackRef.current);
-  }, [playbackMode, images]);
+  }, [playbackMode, images, settings.playbackFps]);
 
   // --- Core Functions ---
 
@@ -179,16 +198,18 @@ const App: React.FC = () => {
         
         setImages(prev => [...prev, newImage]);
 
-        // Auto Analysis
         if (settings.autoAnalyze) {
-          setIsProcessing(true);
           try {
-            const analysis = await analyzeImage(dataUrl, "Briefly analyze this security snapshot. Is there movement or a person?");
-            setImages(prev => prev.map(img => img.id === newImage.id ? { ...img, analysis } : img));
+            const prompt = `Analyze this security snapshot. Focus on critical changes or threats.
+            Identify the scene category (indoors/outdoors, daytime/nighttime).
+            Identify events (e.g., person detected, door opened, package delivered, unusual movement).
+            End your report with structured metadata: [CATEGORY: category] [TAGS: tag1, tag2] [CONFIDENCE: X%]`;
+            const analysis = await analyzeImage(dataUrl, prompt);
+            const metadata = parseMetaData(analysis);
+            setImages(prev => prev.map(img => img.id === newImage.id ? { ...img, analysis, ...metadata } : img));
+            setSelectedImage(prev => prev && prev.id === newImage.id ? { ...prev, analysis, ...metadata } : prev);
           } catch (e) {
             console.error("Auto analysis failed", e);
-          } finally {
-            setIsProcessing(false);
           }
         }
       }
@@ -303,8 +324,6 @@ const App: React.FC = () => {
     }
   };
 
-  // --- Render Helpers ---
-
   const renderThreatBadge = (level: string) => {
     switch(level) {
       case 'CRITICAL': 
@@ -318,12 +337,48 @@ const App: React.FC = () => {
     }
   };
 
-  // --- Render ---
+  const formatTimestamp = (ts: number) => {
+    const d = new Date(ts);
+    if (settings.timestampPrecision === 'date') return d.toLocaleDateString();
+    if (settings.timestampPrecision === 'time') return d.toLocaleTimeString();
+    return `${d.toLocaleDateString()} ${d.toLocaleTimeString()}`;
+  };
+
+  const renderAnalysisText = (text: string) => {
+    const limit = 80;
+    if (text.length <= limit || expandedAnalysis) {
+      return (
+        <div className="space-y-2">
+          <p className="text-sm text-gray-300 leading-relaxed font-light font-mono text-justify">{text}</p>
+          {text.length > limit && (
+            <button 
+              onClick={() => setExpandedAnalysis(false)} 
+              className="text-cyber-accent text-[10px] flex items-center gap-1 hover:underline"
+            >
+              <ChevronUp size={10} /> SHOW LESS
+            </button>
+          )}
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-2">
+        <p className="text-sm text-gray-300 leading-relaxed font-light font-mono text-justify">{text.slice(0, limit)}...</p>
+        <button 
+          onClick={() => setExpandedAnalysis(true)} 
+          className="text-cyber-accent text-[10px] flex items-center gap-1 hover:underline"
+        >
+          <ChevronDown size={10} /> SHOW MORE
+        </button>
+      </div>
+    );
+  };
+
+  const currentThreat = selectedImage ? getThreatLevel(selectedImage.analysis) : 'SAFE';
 
   return (
     <div className="min-h-screen bg-cyber-900 text-gray-200 font-sans selection:bg-cyber-accent selection:text-black">
       
-      {/* Stealth Mode Overlay */}
       {stealthMode && (
         <div 
           className="fixed inset-0 bg-black z-[100] cursor-pointer flex flex-col items-center justify-center select-none"
@@ -349,9 +404,16 @@ const App: React.FC = () => {
              <button 
                 onClick={() => setStealthMode(true)}
                 className="p-2 rounded-full hover:bg-cyber-700 text-gray-400 hover:text-white transition-colors"
-                title="Stealth Mode (Save Battery)"
+                title="Stealth Mode"
              >
                <EyeOff size={18} />
+             </button>
+             <button 
+                onClick={() => setShowSettings(!showSettings)}
+                className={`p-2 rounded-full transition-colors ${showSettings ? 'bg-cyber-accent text-black' : 'text-gray-400 hover:text-white hover:bg-cyber-700'}`}
+                title="System Settings"
+             >
+               <Settings size={18} />
              </button>
              <button 
                 onClick={() => setLiveMode(true)}
@@ -360,40 +422,122 @@ const App: React.FC = () => {
                 <Mic size={16} />
                 <span className="text-sm font-semibold hidden sm:inline">VOICE LINK</span>
              </button>
-             <div className="flex items-center bg-black rounded-lg p-1 border border-cyber-700">
-               <span className="text-xs text-gray-500 px-2 hidden sm:inline">FREQ: {settings.intervalHours}h</span>
-               <input 
-                 type="range" 
-                 min="0.1" 
-                 max="24" 
-                 step="0.1" 
-                 value={settings.intervalHours} 
-                 onChange={(e) => setSettings({...settings, intervalHours: parseFloat(e.target.value)})}
-                 className="w-16 sm:w-24 accent-cyber-accent"
-               />
-             </div>
           </div>
         </div>
       </header>
+
+      {/* Settings Panel Overlay */}
+      {showSettings && (
+        <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex justify-end">
+          <div className="w-80 h-full bg-cyber-800 border-l border-cyber-700 p-6 animate-in slide-in-from-right duration-300">
+            <div className="flex justify-between items-center mb-8 border-b border-cyber-700 pb-4">
+              <h2 className="text-cyber-accent font-mono font-bold flex items-center gap-2"><Settings size={18}/> SYSTEM CONFIG</h2>
+              <button onClick={() => setShowSettings(false)} className="text-gray-500 hover:text-white">✕</button>
+            </div>
+
+            <div className="space-y-8 overflow-y-auto max-h-[calc(100%-100px)] custom-scrollbar pr-2">
+              <section>
+                <label className="text-xs font-mono text-gray-400 mb-2 block flex items-center gap-2"><Clock size={12}/> CAPTURE FREQUENCY</label>
+                <div className="flex items-center gap-4">
+                  <input 
+                    type="range" min="0.1" max="24" step="0.1" 
+                    value={settings.intervalHours} 
+                    onChange={(e) => setSettings({...settings, intervalHours: parseFloat(e.target.value)})}
+                    className="flex-1 accent-cyber-accent"
+                  />
+                  <span className="text-cyber-accent font-mono text-sm">{settings.intervalHours}h</span>
+                </div>
+              </section>
+
+              <section>
+                <label className="text-xs font-mono text-gray-400 mb-2 block flex items-center gap-2"><Calendar size={12}/> T-STAMP OVERLAY</label>
+                <div className="grid grid-cols-3 gap-2">
+                   {(['date', 'time', 'both'] as const).map(p => (
+                     <button 
+                        key={p} 
+                        onClick={() => setSettings({...settings, timestampPrecision: p})}
+                        className={`py-1 text-[10px] rounded border transition-all uppercase ${settings.timestampPrecision === p ? 'bg-cyber-accent text-black border-transparent' : 'border-cyber-700 text-gray-400'}`}
+                     >{p}</button>
+                   ))}
+                </div>
+              </section>
+
+              <section>
+                <label className="text-xs font-mono text-gray-400 mb-2 block flex items-center gap-2"><Cpu size={12}/> INTELLIGENCE ENGINE</label>
+                <div className="flex items-center justify-between p-3 bg-black/40 rounded border border-cyber-700">
+                  <span className="text-sm text-gray-200">Auto-Analyze Snapshots</span>
+                  <button 
+                    onClick={() => setSettings({...settings, autoAnalyze: !settings.autoAnalyze})}
+                    className={`w-10 h-5 rounded-full relative transition-colors ${settings.autoAnalyze ? 'bg-cyber-success' : 'bg-gray-700'}`}
+                  >
+                    <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all ${settings.autoAnalyze ? 'right-1' : 'left-1'}`}></div>
+                  </button>
+                </div>
+              </section>
+
+              <section>
+                <label className="text-xs font-mono text-gray-400 mb-2 block flex items-center gap-2"><Camera size={12}/> OPTICS CONTROL</label>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button 
+                      onClick={() => setSettings({...settings, facingMode: 'environment'})}
+                      className={`py-2 text-xs rounded border transition-all ${settings.facingMode === 'environment' ? 'bg-cyber-accent text-black border-transparent' : 'border-cyber-700 text-gray-400 hover:bg-cyber-700'}`}
+                    >TACTICAL (REAR)</button>
+                    <button 
+                      onClick={() => setSettings({...settings, facingMode: 'user'})}
+                      className={`py-2 text-xs rounded border transition-all ${settings.facingMode === 'user' ? 'bg-cyber-accent text-black border-transparent' : 'border-cyber-700 text-gray-400 hover:bg-cyber-700'}`}
+                    >OPERATOR (FRONT)</button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {['low', 'med', 'high'].map((res: any) => (
+                      <button 
+                        key={res}
+                        onClick={() => setSettings({...settings, resolution: res})}
+                        className={`py-1 text-[10px] rounded border transition-all ${settings.resolution === res ? 'bg-cyber-success text-black border-transparent' : 'border-cyber-700 text-gray-400'}`}
+                      >{res.toUpperCase()}</button>
+                    ))}
+                  </div>
+                </div>
+              </section>
+
+              <section>
+                <label className="text-xs font-mono text-gray-400 mb-2 block flex items-center gap-2"><FastForward size={12}/> PLAYBACK SPEED</label>
+                <div className="flex items-center gap-4">
+                  <input 
+                    type="range" min="1" max="30" step="1" 
+                    value={settings.playbackFps} 
+                    onChange={(e) => setSettings({...settings, playbackFps: parseInt(e.target.value)})}
+                    className="flex-1 accent-cyber-success"
+                  />
+                  <span className="text-cyber-success font-mono text-sm">{settings.playbackFps} FPS</span>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Left Col: Visuals */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Camera Viewport with HUD */}
           <div className="aspect-video w-full relative group bg-black rounded-lg border border-cyber-700 overflow-hidden shadow-[0_0_20px_rgba(0,242,255,0.05)]">
             {playbackMode && selectedImage ? (
                <img src={selectedImage.dataUrl} className="w-full h-full object-cover" />
             ) : (
-              <CameraFeed ref={cameraRef} active={true} />
+              <CameraFeed 
+                ref={cameraRef} 
+                active={true} 
+                facingMode={settings.facingMode} 
+                resolution={settings.resolution}
+              />
             )}
             
-            {/* Live HUD Overlay */}
             <div className="absolute inset-0 pointer-events-none p-4 flex flex-col justify-between">
               <div className="flex justify-between items-start">
                  <div className="bg-black/60 backdrop-blur-sm p-2 rounded border-l-2 border-cyber-accent">
-                    <div className="text-xs font-mono text-cyber-accent">CAM-01 // LIVE</div>
+                    <div className="text-xs font-mono text-cyber-accent">CAM-01 // {settings.facingMode.toUpperCase()}</div>
                     <div className="text-lg font-mono text-white font-bold">{currentTime.toLocaleTimeString()}</div>
                  </div>
                  {active && (
@@ -409,12 +553,10 @@ const App: React.FC = () => {
                    LAT: {location?.lat.toFixed(4) || '---'} <br/>
                    LNG: {location?.lng.toFixed(4) || '---'}
                 </div>
-                {/* Crosshair decoration */}
                 <div className="w-8 h-8 border-r-2 border-b-2 border-cyber-accent/50"></div>
               </div>
             </div>
 
-            {/* Controls Overlay */}
             <div className="absolute bottom-4 left-4 right-4 flex justify-between items-center z-10 pointer-events-none">
                <div className="pointer-events-auto flex gap-2">
                   <button 
@@ -444,7 +586,6 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          {/* Timeline Gallery */}
           <div className="bg-cyber-800/50 p-4 rounded-xl border border-cyber-700 backdrop-blur-sm">
              <div className="flex justify-between items-center mb-3">
                 <div className="flex items-center gap-4">
@@ -457,7 +598,6 @@ const App: React.FC = () => {
                 <button 
                   onClick={clearTimeline} 
                   className="text-xs flex items-center gap-1 text-gray-500 hover:text-cyber-warn transition-colors px-2 py-1 hover:bg-cyber-warn/10 rounded"
-                  title="Clear all data"
                 >
                   <Trash2 size={12} /> PURGE DATA
                 </button>
@@ -469,48 +609,102 @@ const App: React.FC = () => {
         {/* Right Col: Intelligence Hub */}
         <div className="lg:col-span-1 flex flex-col h-[500px] lg:h-[calc(100vh-8rem)] sticky top-24">
            {selectedImage && !playbackMode ? (
-             <div className="flex-1 bg-cyber-800 rounded-xl border border-cyber-700 overflow-hidden flex flex-col animate-in fade-in slide-in-from-right-4 relative">
+             <div className={`flex-1 bg-cyber-800 rounded-xl border overflow-hidden flex flex-col animate-in fade-in slide-in-from-right-4 relative transition-all duration-500 ${currentThreat === 'CRITICAL' ? 'border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)] ring-2 ring-red-500/20 animate-pulse' : 'border-cyber-700'}`}>
                 <div className="p-3 border-b border-cyber-700 flex justify-between items-center bg-black/20">
                   <h3 className="font-mono text-cyber-accent flex items-center gap-2"><Terminal size={14}/> ANALYSIS MODE</h3>
                   <button onClick={() => setSelectedImage(null)} className="text-gray-400 hover:text-white text-xs">CLOSE X</button>
                 </div>
                 <div className="p-4 flex-1 overflow-y-auto custom-scrollbar">
-                  <div className="relative">
-                    <img src={selectedImage.dataUrl} className="w-full rounded-lg mb-4 border border-gray-700" alt="Analysis Target" />
-                    {/* Image Overlay Timestamp */}
+                  <div className="relative group/img overflow-hidden rounded-lg mb-4 border border-gray-700">
+                    <img src={selectedImage.dataUrl} className="w-full transition-transform duration-500 group-hover/img:scale-105" alt="Analysis Target" />
+                    
+                    {/* Timestamp Overlay */}
+                    <div className="absolute top-2 left-2 bg-black/70 text-cyber-accent text-[9px] px-2 py-1 font-mono rounded border border-cyber-accent/30 backdrop-blur-md">
+                      {formatTimestamp(selectedImage.timestamp)}
+                    </div>
+
                     <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-1 font-mono rounded">
-                      {new Date(selectedImage.timestamp).toLocaleTimeString()}
+                      ID-{selectedImage.id.slice(-4)}
                     </div>
                   </div>
                   
                   {selectedImage.analysis ? (
                     <div className="space-y-4">
-                       <div className="flex justify-between items-center bg-black/20 p-2 rounded border border-cyber-700">
-                         <span className="text-xs text-gray-400 font-mono">THREAT LEVEL</span>
-                         {renderThreatBadge(getThreatLevel(selectedImage.analysis))}
+                       <div className="grid grid-cols-2 gap-2">
+                          <div className="bg-black/20 p-2 rounded border border-cyber-700 flex flex-col">
+                             <span className="text-[9px] text-gray-500 font-mono">STATUS</span>
+                             {renderThreatBadge(getThreatLevel(selectedImage.analysis))}
+                          </div>
+                          <div className="bg-black/20 p-2 rounded border border-cyber-700 flex flex-col text-right">
+                             <span className="text-[9px] text-gray-500 font-mono block">PRECISION</span>
+                             <span className="text-cyber-accent font-mono font-bold text-xs">{selectedImage.confidence || '--'}%</span>
+                          </div>
                        </div>
+
+                       {selectedImage.sceneCategory && (
+                         <div className="bg-cyber-accent/5 p-2 rounded border border-cyber-accent/20 flex items-center justify-between">
+                            <span className="text-[9px] text-gray-400 font-mono uppercase tracking-widest">Scene Classification</span>
+                            <span className="text-[10px] text-cyber-accent font-bold uppercase">{selectedImage.sceneCategory}</span>
+                         </div>
+                       )}
+
+                       {selectedImage.eventTags && selectedImage.eventTags.length > 0 && (
+                         <div className="flex flex-wrap gap-1">
+                            {selectedImage.eventTags.map((tag, idx) => (
+                              <span key={idx} className="flex items-center gap-1 text-[9px] bg-cyber-success/10 text-cyber-success px-2 py-1 rounded border border-cyber-success/30 font-mono uppercase">
+                                <Tag size={8}/> {tag}
+                              </span>
+                            ))}
+                         </div>
+                       )}
 
                        <div className="bg-black/20 p-3 rounded border border-cyber-700">
                          <h4 className="text-white font-bold text-xs mb-2 flex items-center gap-2"><BrainCircuit size={12} className="text-cyber-accent"/> INTELLIGENCE REPORT</h4>
-                         <p className="text-sm text-gray-300 leading-relaxed font-light font-mono text-justify">{selectedImage.analysis}</p>
+                         {renderAnalysisText(selectedImage.analysis)}
                        </div>
                        
-                       <button 
-                        onClick={readAnalysis}
-                        disabled={isSpeaking}
-                        className={`w-full py-3 rounded text-sm font-bold flex justify-center items-center gap-2 transition-all ${isSpeaking ? 'bg-cyber-accent text-black animate-pulse' : 'bg-cyber-700 text-white hover:bg-cyber-600'}`}
-                       >
-                         {isSpeaking ? <><Activity size={16} className="animate-spin"/> TRANSMITTING AUDIO...</> : <><Volume2 size={16}/> READ ALOUD</>}
-                       </button>
+                       <div className="grid grid-cols-1 gap-2">
+                         <button 
+                          onClick={readAnalysis}
+                          disabled={isSpeaking}
+                          className={`w-full py-3 rounded text-sm font-bold flex justify-center items-center gap-2 transition-all ${isSpeaking ? 'bg-cyber-accent text-black animate-pulse' : 'bg-cyber-700 text-white hover:bg-cyber-600'}`}
+                         >
+                           {isSpeaking ? <><Activity size={16} className="animate-spin"/> TRANSMITTING...</> : <><Volume2 size={16}/> READ ALOUD</>}
+                         </button>
+
+                         {/* Context-Aware Buttons */}
+                         {currentThreat === 'CRITICAL' && (
+                           <button 
+                             onClick={() => alert("EMERGENCY SIGNAL BROADCASTED TO AUTHORITIES")}
+                             className="w-full py-3 bg-red-600 hover:bg-red-500 text-white rounded text-sm font-bold flex justify-center items-center gap-2 shadow-lg shadow-red-600/20"
+                           >
+                             <Siren size={16}/> NOTIFY AUTHORITIES
+                           </button>
+                         )}
+
+                         {(selectedImage.analysis.toLowerCase().includes('person') || selectedImage.analysis.toLowerCase().includes('human')) && (
+                           <button 
+                             onClick={() => setLiveMode(true)}
+                             className="w-full py-3 bg-cyber-success/20 border border-cyber-success text-cyber-success hover:bg-cyber-success hover:text-black rounded text-sm font-bold flex justify-center items-center gap-2 transition-all"
+                           >
+                             <Radio size={16}/> INTERCEPT COMMS (LIVE)
+                           </button>
+                         )}
+                       </div>
                     </div>
                   ) : (
                     <button 
                       onClick={async () => {
                         if(!selectedImage) return;
                         setIsProcessing(true);
-                        const ans = await analyzeImage(selectedImage.dataUrl);
-                        setImages(prev => prev.map(img => img.id === selectedImage.id ? { ...img, analysis: ans } : img));
-                        setSelectedImage(prev => prev ? {...prev, analysis: ans} : null);
+                        const prompt = `Analyze this security snapshot. Focus on critical changes or threats.
+                        Identify the scene category (indoors/outdoors, daytime/nighttime).
+                        Identify events (e.g., person detected, door opened, package delivered, unusual movement).
+                        End your report with structured metadata: [CATEGORY: category] [TAGS: tag1, tag2] [CONFIDENCE: X%]`;
+                        const ans = await analyzeImage(selectedImage.dataUrl, prompt);
+                        const metadata = parseMetaData(ans);
+                        setImages(prev => prev.map(img => img.id === selectedImage.id ? { ...img, analysis: ans, ...metadata } : img));
+                        setSelectedImage(prev => prev ? {...prev, analysis: ans, ...metadata} : null);
                         setIsProcessing(false);
                       }}
                       disabled={isProcessing}
@@ -535,7 +729,6 @@ const App: React.FC = () => {
                  </button>
                </div>
                
-               {/* Chat History */}
                <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-black/20">
                  {chatMessages.length === 0 && (
                    <div className="text-center text-gray-600 mt-10">
@@ -547,7 +740,7 @@ const App: React.FC = () => {
                  {chatMessages.map(msg => (
                    <div key={msg.id} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                       <div className={`max-w-[85%] rounded-lg p-3 text-sm ${msg.role === 'user' ? 'bg-cyber-700 text-white' : 'bg-black/40 border border-cyber-700/50 text-gray-300'}`}>
-                        {msg.isThinking && <div className="text-xs text-cyber-accent mb-1 font-mono flex items-center gap-1"><BrainCircuit size={10}/> THINKING PROCESS COMPLETE</div>}
+                        {msg.isThinking && <div className="text-xs text-cyber-accent mb-1 font-mono flex items-center gap-1"><BrainCircuit size={10}/> THINKING PROCESS...</div>}
                         <div className="whitespace-pre-wrap">{msg.text}</div>
                       </div>
                       {msg.groundingUrls && msg.groundingUrls.length > 0 && (
@@ -570,14 +763,12 @@ const App: React.FC = () => {
                  )}
                </div>
 
-               {/* Input Area */}
                <div className="p-3 bg-cyber-900 border-t border-cyber-700">
-                  {/* Tool Toggles */}
                   <div className="flex gap-2 mb-2 justify-center">
                     <button 
                       onClick={() => { setUseThinking(!useThinking); setUseSearch(false); setUseMaps(false); }}
                       className={`p-1.5 rounded ${useThinking ? 'bg-cyber-accent text-black' : 'text-gray-500 hover:text-white'}`}
-                      title="Deep Thinking (Pro)"
+                      title="Deep Thinking"
                     ><BrainCircuit size={16}/></button>
                     <button 
                       onClick={() => { setUseSearch(!useSearch); setUseThinking(false); setUseMaps(false); }}

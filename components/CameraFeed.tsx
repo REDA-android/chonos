@@ -2,6 +2,8 @@ import React, { useRef, useEffect, useState, useImperativeHandle, forwardRef } f
 
 interface CameraFeedProps {
   active: boolean;
+  facingMode: 'user' | 'environment';
+  resolution: 'low' | 'med' | 'high';
   onCapture?: (dataUrl: string) => void;
 }
 
@@ -9,7 +11,7 @@ export interface CameraHandle {
   capture: () => string | null;
 }
 
-const CameraFeed = forwardRef<CameraHandle, CameraFeedProps>(({ active, onCapture }, ref) => {
+const CameraFeed = forwardRef<CameraHandle, CameraFeedProps>(({ active, facingMode, resolution, onCapture }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState<string>('');
@@ -38,8 +40,17 @@ const CameraFeed = forwardRef<CameraHandle, CameraFeedProps>(({ active, onCaptur
 
     const startCamera = async () => {
       try {
+        const resConstraints = {
+          low: { width: 640, height: 480 },
+          med: { width: 1280, height: 720 },
+          high: { width: 1920, height: 1080 }
+        }[resolution];
+
         stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: 'environment' }, 
+          video: { 
+            facingMode: facingMode,
+            ...resConstraints
+          }, 
           audio: false 
         });
         if (videoRef.current) {
@@ -47,7 +58,7 @@ const CameraFeed = forwardRef<CameraHandle, CameraFeedProps>(({ active, onCaptur
         }
       } catch (err) {
         console.error("Camera access denied:", err);
-        setError("Camera access denied. Please enable permissions.");
+        setError("Camera access denied or resolution not supported. Please check permissions.");
       }
     };
 
@@ -66,7 +77,7 @@ const CameraFeed = forwardRef<CameraHandle, CameraFeedProps>(({ active, onCaptur
         stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [active]);
+  }, [active, facingMode, resolution]);
 
   return (
     <div className="relative w-full h-full bg-black rounded-lg overflow-hidden border border-cyber-700 shadow-[0_0_15px_rgba(0,242,255,0.1)]">
@@ -83,14 +94,12 @@ const CameraFeed = forwardRef<CameraHandle, CameraFeedProps>(({ active, onCaptur
             muted 
             className="w-full h-full object-cover"
           />
-          {/* Overlay Grid for "Sentinel" feel */}
           <div className="absolute inset-0 pointer-events-none opacity-20 bg-[linear-gradient(rgba(0,242,255,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(0,242,255,0.1)_1px,transparent_1px)] bg-[size:40px_40px]"></div>
           
-          {/* Status Indicator */}
           <div className="absolute top-4 right-4 flex items-center space-x-2 bg-cyber-900/80 px-3 py-1 rounded-full border border-cyber-accent/30 backdrop-blur-sm">
             <div className={`w-2 h-2 rounded-full ${active ? 'bg-cyber-success animate-pulse' : 'bg-gray-500'}`}></div>
             <span className="text-xs font-mono text-cyber-accent uppercase">
-              {active ? 'Live Feed' : 'Offline'}
+              {active ? `LIVE // ${resolution.toUpperCase()}` : 'OFFLINE'}
             </span>
           </div>
         </>
