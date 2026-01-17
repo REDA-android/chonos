@@ -67,12 +67,12 @@ const App: React.FC = () => {
     resolution: 'med',
     playbackFps: 4,
     timestampPrecision: 'both',
-    minConfidenceThreshold: 70
+    minConfidenceThreshold: 70,
+    autoAdvance: true
   });
   const [selectedImage, setSelectedImage] = useState<CapturedImage | null>(null);
   const [liveMode, setLiveMode] = useState(false);
   const [playbackMode, setPlaybackMode] = useState(false);
-  const [autoAdvance, setAutoAdvance] = useState(true);
   const [stealthMode, setStealthMode] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [expandedAnalysis, setExpandedAnalysis] = useState(false);
@@ -208,7 +208,7 @@ const App: React.FC = () => {
   }, [active, settings.intervalHours]);
 
   useEffect(() => {
-    if (playbackMode && images.length > 0 && autoAdvance) {
+    if (playbackMode && images.length > 0 && settings.autoAdvance) {
       let idx = selectedImage ? images.findIndex(img => img.id === selectedImage.id) : 0;
       if (idx === -1) idx = 0;
 
@@ -221,7 +221,7 @@ const App: React.FC = () => {
       clearInterval(playbackRef.current);
     }
     return () => clearInterval(playbackRef.current);
-  }, [playbackMode, images, settings.playbackFps, autoAdvance]); // autoAdvance is now a dependency
+  }, [playbackMode, images, settings.playbackFps, settings.autoAdvance, selectedImage]); 
 
   // Reset zoom when selecting a new image
   useEffect(() => {
@@ -650,14 +650,25 @@ const App: React.FC = () => {
 
               <section>
                 <label className="text-xs font-mono text-gray-400 mb-2 block flex items-center gap-2"><FastForward size={12}/> PLAYBACK SPEED</label>
-                <div className="flex items-center gap-4">
-                  <input 
-                    type="range" min="1" max="30" step="1" 
-                    value={settings.playbackFps} 
-                    onChange={(e) => setSettings({...settings, playbackFps: parseInt(e.target.value)})}
-                    className="flex-1 accent-cyber-success"
-                  />
-                  <span className="text-cyber-success font-mono text-sm">{settings.playbackFps} FPS</span>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-4">
+                    <input 
+                      type="range" min="1" max="30" step="1" 
+                      value={settings.playbackFps} 
+                      onChange={(e) => setSettings({...settings, playbackFps: parseInt(e.target.value)})}
+                      className="flex-1 accent-cyber-success"
+                    />
+                    <span className="text-cyber-success font-mono text-sm">{settings.playbackFps} FPS</span>
+                  </div>
+                   <div className="flex items-center justify-between p-3 bg-black/40 rounded border border-cyber-700">
+                      <span className="text-sm text-gray-200">Auto-Advance Slideshow</span>
+                      <button 
+                        onClick={() => setSettings({...settings, autoAdvance: !settings.autoAdvance})}
+                        className={`w-10 h-5 rounded-full relative transition-colors ${settings.autoAdvance ? 'bg-cyber-success' : 'bg-gray-700'}`}
+                      >
+                        <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all ${settings.autoAdvance ? 'right-1' : 'left-1'}`}></div>
+                      </button>
+                    </div>
                 </div>
               </section>
             </div>
@@ -697,8 +708,8 @@ const App: React.FC = () => {
                  {playbackMode && (
                     <div className="pointer-events-auto bg-black/60 backdrop-blur-sm p-1 rounded border border-cyber-accent/30 flex items-center gap-2">
                         <button 
-                          onClick={() => setAutoAdvance(!autoAdvance)} 
-                          className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono border transition-all ${autoAdvance ? 'bg-cyber-accent/20 border-cyber-accent text-cyber-accent' : 'border-gray-600 text-gray-400'}`}
+                          onClick={() => setSettings({...settings, autoAdvance: !settings.autoAdvance})}
+                          className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono border transition-all ${settings.autoAdvance ? 'bg-cyber-accent/20 border-cyber-accent text-cyber-accent' : 'border-gray-600 text-gray-400'}`}
                         >
                             <Repeat size={10} /> AUTO-ADVANCE
                         </button>
@@ -736,7 +747,6 @@ const App: React.FC = () => {
                     onClick={() => {
                        if (images.length > 0) {
                            setPlaybackMode(!playbackMode);
-                           if (!playbackMode) setAutoAdvance(true); // Default to auto when starting
                        }
                     }}
                     disabled={images.length === 0}

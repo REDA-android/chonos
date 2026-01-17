@@ -34,4 +34,5 @@ export interface MonitorSettings {
   playbackFps: number;
   timestampPrecision: 'date' | 'time' | 'both';
   minConfidenceThreshold: number;
+  autoAdvance: boolean;
 }

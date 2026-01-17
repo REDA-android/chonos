@@ -63,7 +63,7 @@ const Timeline: React.FC<TimelineProps> = ({ images, onSelect }) => {
 
             {/* Growth Stage Icon */}
             {img.growthStage && (
-              <div className="absolute top-2 left-2 bg-black/80 p-1 rounded-full border border-gray-600 shadow-md">
+              <div className="absolute top-2 left-2 bg-black/80 p-1 rounded-full border border-gray-600 shadow-md backdrop-blur-sm">
                 {getStageIcon(img.growthStage)}
               </div>
             )}
