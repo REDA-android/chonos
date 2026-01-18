@@ -518,6 +518,16 @@ const App: React.FC = () => {
     }
   };
 
+  // Border class specifically for the Analysis Image Preview
+  const getStatusBorderClass = (status: string) => {
+    switch(status) {
+        case 'CRITICAL': return 'border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.3)]';
+        case 'STRESSED': return 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)]';
+        case 'HEALTHY': return 'border-cyber-accent shadow-[0_0_15px_rgba(132,204,22,0.3)]';
+        default: return 'border-gray-700';
+    }
+  };
+
   return (
     <div className="min-h-screen bg-cyber-900 text-gray-200 font-sans selection:bg-cyber-accent selection:text-black">
       
@@ -817,7 +827,7 @@ const App: React.FC = () => {
                   
                   {/* Interactive Image Container */}
                   <div 
-                     className="relative group/img overflow-hidden rounded-lg mb-4 border border-gray-700 h-48 cursor-grab active:cursor-grabbing bg-black"
+                     className={`relative group/img overflow-hidden rounded-lg mb-4 border h-48 cursor-grab active:cursor-grabbing bg-black ${getStatusBorderClass(currentStatus)}`}
                      onWheel={handleStaticWheel}
                      onMouseDown={handleStaticMouseDown}
                      onMouseMove={handleStaticMouseMove}
