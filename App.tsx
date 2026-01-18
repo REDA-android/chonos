@@ -52,12 +52,15 @@ import {
   Sun,
   Flower,
   AlertCircle,
-  Repeat
+  Repeat,
+  Power,
+  HelpCircle
 } from 'lucide-react';
 
 const App: React.FC = () => {
   // --- State ---
   const [active, setActive] = useState(false);
+  const [isCameraEnabled, setIsCameraEnabled] = useState(true);
   const [images, setImages] = useState<CapturedImage[]>([]);
   const [settings, setSettings] = useState<MonitorSettings>({
     intervalHours: 1.5,
@@ -144,7 +147,6 @@ const App: React.FC = () => {
   };
 
   const addLogToChat = (analysis: string, timestamp: number) => {
-    // Extract summary (first sentence or up to 15 words)
     let summary = analysis.split('.')[0];
     if (summary.split(' ').length > 15) {
         summary = summary.split(' ').slice(0, 15).join(' ') + '...';
@@ -158,6 +160,16 @@ const App: React.FC = () => {
         text: `LOG [${timeStr}]: ${summary}`,
         timestamp: Date.now()
     }]);
+  };
+
+  const getStageIcon = (stage?: string, size = 16) => {
+    if (!stage) return null;
+    const s = stage.toLowerCase();
+    if (s.includes('germinat') || s.includes('seed') || s.includes('sprout')) return <Sprout size={size} className="text-cyber-accent" />;
+    if (s.includes('flower') || s.includes('bloom') || s.includes('bud')) return <Flower size={size} className="text-pink-400" />;
+    if (s.includes('fruit') || s.includes('harvest') || s.includes('mature')) return <Sun size={size} className="text-orange-400" />;
+    if (s.includes('veg') || s.includes('leaf')) return <Leaf size={size} className="text-green-400" />;
+    return <HelpCircle size={size} className="text-gray-400" />;
   };
 
   // --- Effects ---
@@ -223,7 +235,6 @@ const App: React.FC = () => {
     return () => clearInterval(playbackRef.current);
   }, [playbackMode, images, settings.playbackFps, settings.autoAdvance, selectedImage]); 
 
-  // Reset zoom when selecting a new image
   useEffect(() => {
      setStaticZoom(1);
      setStaticPan({x:0, y:0});
@@ -263,7 +274,6 @@ const App: React.FC = () => {
             setImages(prev => prev.map(img => img.id === newImage.id ? { ...img, analysis, ...metadata } : img));
             setSelectedImage(prev => prev && prev.id === newImage.id ? { ...prev, analysis, ...metadata } : prev);
             
-            // Auto-Log to Chat
             addLogToChat(analysis, newImage.timestamp);
 
           } catch (e) {
@@ -380,7 +390,7 @@ const App: React.FC = () => {
   };
 
   const clearTimeline = () => {
-    if(window.confirm("WARNING: PURGE ALL PLANT DATA? THIS ACTION CANNOT BE UNDONE.")) {
+    if(window.confirm("CRITICAL WARNING: This will PERMANENTLY PURGE all captured plant images and AI growth data. Do you wish to proceed with the data wipe?")) {
       setImages([]);
       setSelectedImage(null);
       setPlaybackMode(false);
@@ -413,9 +423,7 @@ const App: React.FC = () => {
   const handleLiveTranscript = (text: string, isUser: boolean) => {
       setChatMessages(prev => {
           const lastMsg = prev[prev.length - 1];
-          // Simple debouncing/appending to avoid chat spam
           if (lastMsg && lastMsg.role === (isUser ? 'user' : 'model') && (Date.now() - lastMsg.timestamp < 3000)) {
-               // Append to previous message if very recent
                return [...prev.slice(0, -1), { ...lastMsg, text: lastMsg.text + " " + text }];
           }
           return [...prev, {
@@ -446,16 +454,16 @@ const App: React.FC = () => {
   };
   const handleStaticMouseUp = () => setIsStaticDragging(false);
 
-  const renderHealthBadge = (status: string) => {
+  const renderHealthBadge = (status: string, compact = false) => {
     switch(status) {
       case 'CRITICAL': 
-        return <div className="flex items-center gap-1 text-red-500 bg-red-500/10 px-2 py-1 rounded border border-red-500 animate-pulse"><AlertTriangle size={14}/> DISEASE / PEST</div>;
+        return <div className={`flex items-center gap-1 text-red-500 bg-red-500/10 ${compact ? 'px-1.5 py-0.5' : 'px-2 py-1'} rounded border border-red-500 animate-pulse`}><AlertTriangle size={compact ? 10 : 14}/> {compact ? 'CRITICAL' : 'DISEASE / PEST'}</div>;
       case 'STRESSED':
-        return <div className="flex items-center gap-1 text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded border border-yellow-500"><Droplet size={14}/> STRESSED</div>;
+        return <div className={`flex items-center gap-1 text-yellow-500 bg-yellow-500/10 ${compact ? 'px-1.5 py-0.5' : 'px-2 py-1'} rounded border border-yellow-500`}><Droplet size={compact ? 10 : 14}/> {compact ? 'STRESSED' : 'STRESSED'}</div>;
       case 'HEALTHY':
-        return <div className="flex items-center gap-1 text-cyber-accent bg-cyber-accent/10 px-2 py-1 rounded border border-cyber-accent"><Sprout size={14}/> THRIVING</div>;
+        return <div className={`flex items-center gap-1 text-cyber-accent bg-cyber-accent/10 ${compact ? 'px-1.5 py-0.5' : 'px-2 py-1'} rounded border border-cyber-accent`}><Sprout size={compact ? 10 : 14}/> {compact ? 'HEALTHY' : 'THRIVING'}</div>;
       default:
-        return <div className="flex items-center gap-1 text-gray-500 bg-gray-500/10 px-2 py-1 rounded border border-gray-500">ANALYZING...</div>;
+        return <div className={`flex items-center gap-1 text-gray-500 bg-gray-500/10 ${compact ? 'px-1.5 py-0.5' : 'px-2 py-1'} rounded border border-gray-500 text-[10px]`}>ANALYZING...</div>;
     }
   };
 
@@ -496,9 +504,8 @@ const App: React.FC = () => {
     );
   };
 
-  const currentStatus = selectedImage?.healthStatus || (selectedImage?.analysis ? getHealthStatus(selectedImage.analysis) : 'HEALTHY');
+  const currentStatus = selectedImage?.healthStatus || (selectedImage?.analysis ? getHealthStatus(selectedImage.analysis) : 'UNKNOWN');
   
-  // Calculate latest health for visual aura
   const latestImage = images.length > 0 ? images[images.length - 1] : null;
   const latestHealth = latestImage?.healthStatus || 'UNKNOWN';
 
@@ -687,7 +694,7 @@ const App: React.FC = () => {
             ) : (
               <CameraFeed 
                 ref={cameraRef} 
-                active={true} 
+                active={isCameraEnabled} 
                 facingMode={settings.facingMode} 
                 resolution={settings.resolution}
               />
@@ -756,13 +763,22 @@ const App: React.FC = () => {
                   </button>
                </div>
 
-               <button 
-                 onClick={handleManualCapture}
-                 className="pointer-events-auto p-3 bg-cyber-700 rounded-full hover:bg-white hover:text-black transition-colors border border-gray-600 shadow-lg"
-                 title="Capture Now"
-               >
-                 <Eye size={20} />
-               </button>
+               <div className="pointer-events-auto flex gap-2">
+                 <button 
+                   onClick={() => setIsCameraEnabled(!isCameraEnabled)}
+                   className={`p-3 rounded-full transition-all border shadow-lg ${isCameraEnabled ? 'bg-cyber-success text-black border-transparent shadow-cyber-success/20' : 'bg-gray-800 text-gray-400 border-gray-600'}`}
+                   title={isCameraEnabled ? "Deactivate Optics" : "Activate Optics"}
+                 >
+                   <Power size={20} />
+                 </button>
+                 <button 
+                   onClick={handleManualCapture}
+                   className="p-3 bg-cyber-700 rounded-full hover:bg-white hover:text-black transition-colors border border-gray-600 shadow-lg"
+                   title="Capture Now"
+                 >
+                   <Eye size={20} />
+                 </button>
+               </div>
             </div>
           </div>
 
@@ -791,7 +807,10 @@ const App: React.FC = () => {
            {selectedImage && !playbackMode ? (
              <div className={`flex-1 bg-cyber-800 rounded-xl border overflow-hidden flex flex-col animate-in fade-in slide-in-from-right-4 relative transition-all duration-500 ${currentStatus === 'CRITICAL' ? 'border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)] ring-2 ring-red-500/20 animate-pulse' : 'border-cyber-700'}`}>
                 <div className="p-3 border-b border-cyber-700 flex justify-between items-center bg-black/20">
-                  <h3 className="font-mono text-cyber-accent flex items-center gap-2"><Terminal size={14}/> ANALYSIS MODE</h3>
+                  <div className="flex items-center gap-2">
+                    <Terminal size={14} className="text-cyber-accent" />
+                    <h3 className="font-mono text-cyber-accent text-sm">ANALYSIS MODE</h3>
+                  </div>
                   <button onClick={() => setSelectedImage(null)} className="text-gray-400 hover:text-white text-xs">CLOSE X</button>
                 </div>
                 <div className="p-4 flex-1 overflow-y-auto custom-scrollbar">
@@ -819,9 +838,21 @@ const App: React.FC = () => {
                       {formatTimestamp(selectedImage.timestamp)}
                     </div>
 
+                    {/* Health Status Overlay on Image */}
+                    <div className="absolute bottom-2 left-2 pointer-events-none">
+                       {renderHealthBadge(currentStatus, true)}
+                    </div>
+
+                    {/* Growth Stage Overlay on Image */}
+                    {selectedImage.growthStage && (
+                      <div className="absolute top-2 right-2 bg-black/80 p-1.5 rounded-full border border-cyber-accent/40 backdrop-blur-md shadow-lg pointer-events-none">
+                        {getStageIcon(selectedImage.growthStage, 14)}
+                      </div>
+                    )}
+
                     {/* Low Confidence Warning */}
                     {selectedImage.confidence && selectedImage.confidence < settings.minConfidenceThreshold && (
-                        <div className="absolute top-2 right-2 bg-yellow-500/90 text-black text-[9px] px-2 py-1 font-bold font-mono rounded flex items-center gap-1 shadow-lg pointer-events-none animate-bounce">
+                        <div className="absolute top-10 right-2 bg-yellow-500/90 text-black text-[9px] px-2 py-1 font-bold font-mono rounded flex items-center gap-1 shadow-lg pointer-events-none animate-bounce">
                            <AlertCircle size={10} /> TENTATIVE
                         </div>
                     )}
@@ -839,89 +870,90 @@ const App: React.FC = () => {
                      </div>
                   </div>
                   
-                  {selectedImage.analysis ? (
-                    <div className="space-y-4">
-                       <div className="grid grid-cols-2 gap-2">
-                          <div className="bg-black/20 p-2 rounded border border-cyber-700 flex flex-col">
-                             <span className="text-[9px] text-gray-500 font-mono">STATUS</span>
-                             {renderHealthBadge(currentStatus)}
+                  <div className="space-y-4">
+                     <div className="grid grid-cols-2 gap-2">
+                        <div className="bg-black/20 p-2 rounded border border-cyber-700 flex flex-col">
+                           <span className="text-[9px] text-gray-500 font-mono">HEALTH STATUS</span>
+                           {renderHealthBadge(currentStatus)}
+                        </div>
+                        <div className="bg-black/20 p-2 rounded border border-cyber-700 flex flex-col text-right">
+                           <span className="text-[9px] text-gray-500 font-mono block">PRECISION</span>
+                           <span className={`font-mono font-bold text-xs ${selectedImage.confidence && selectedImage.confidence < settings.minConfidenceThreshold ? 'text-yellow-500' : 'text-cyber-accent'}`}>
+                               {selectedImage.confidence || '--'}%
+                           </span>
+                        </div>
+                     </div>
+
+                     {selectedImage.growthStage && (
+                       <div className="bg-cyber-accent/5 p-2 rounded border border-cyber-accent/20 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                             {getStageIcon(selectedImage.growthStage, 14)}
+                             <span className="text-[9px] text-gray-400 font-mono uppercase tracking-widest">Growth Stage</span>
                           </div>
-                          <div className="bg-black/20 p-2 rounded border border-cyber-700 flex flex-col text-right">
-                             <span className="text-[9px] text-gray-500 font-mono block">PRECISION</span>
-                             <span className={`font-mono font-bold text-xs ${selectedImage.confidence && selectedImage.confidence < settings.minConfidenceThreshold ? 'text-yellow-500' : 'text-cyber-accent'}`}>
-                                 {selectedImage.confidence || '--'}%
-                             </span>
-                          </div>
+                          <span className="text-[10px] text-cyber-accent font-bold uppercase">{selectedImage.growthStage}</span>
                        </div>
+                     )}
 
-                       {selectedImage.growthStage && (
-                         <div className="bg-cyber-accent/5 p-2 rounded border border-cyber-accent/20 flex items-center justify-between">
-                            <span className="text-[9px] text-gray-400 font-mono uppercase tracking-widest">Growth Stage</span>
-                            <span className="text-[10px] text-cyber-accent font-bold uppercase">{selectedImage.growthStage}</span>
-                         </div>
-                       )}
-
-                       {selectedImage.eventTags && selectedImage.eventTags.length > 0 && (
-                         <div className="flex flex-wrap gap-1">
-                            {selectedImage.eventTags.map((tag, idx) => (
-                              <span key={idx} className="flex items-center gap-1 text-[9px] bg-cyber-success/10 text-cyber-success px-2 py-1 rounded border border-cyber-success/30 font-mono uppercase">
-                                <Tag size={8}/> {tag}
-                              </span>
-                            ))}
-                         </div>
-                       )}
-
-                       <div className="bg-black/20 p-3 rounded border border-cyber-700">
-                         <h4 className="text-white font-bold text-xs mb-2 flex items-center gap-2"><BrainCircuit size={12} className="text-cyber-accent"/> BOTANIST REPORT</h4>
-                         {renderAnalysisText(selectedImage.analysis)}
+                     {selectedImage.eventTags && selectedImage.eventTags.length > 0 && (
+                       <div className="flex flex-wrap gap-1">
+                          {selectedImage.eventTags.map((tag, idx) => (
+                            <span key={idx} className="flex items-center gap-1 text-[9px] bg-cyber-success/10 text-cyber-success px-2 py-1 rounded border border-cyber-success/30 font-mono uppercase">
+                              <Tag size={8}/> {tag}
+                            </span>
+                          ))}
                        </div>
-                       
-                       <div className="grid grid-cols-1 gap-2">
+                     )}
+
+                     <div className="bg-black/20 p-3 rounded border border-cyber-700">
+                       <h4 className="text-white font-bold text-xs mb-2 flex items-center gap-2"><BrainCircuit size={12} className="text-cyber-accent"/> BOTANIST REPORT</h4>
+                       {selectedImage.analysis ? renderAnalysisText(selectedImage.analysis) : <span className="text-xs text-gray-500 italic">No analysis data available for this snapshot.</span>}
+                     </div>
+                     
+                     <div className="grid grid-cols-1 gap-2">
+                        <button 
+                          onClick={() => performManualAnalysis(selectedImage)}
+                          disabled={isProcessing}
+                          className="w-full py-3 bg-cyber-accent/20 border border-cyber-accent text-cyber-accent hover:bg-cyber-accent hover:text-black rounded text-sm font-bold flex justify-center items-center gap-2 transition-all"
+                        >
+                          {isProcessing ? <Zap className="animate-pulse" size={16}/> : <BrainCircuit size={16}/>}
+                          {isProcessing ? 'SCANNING...' : selectedImage.analysis ? 'RE-ANALYZE OPTICS' : 'ANALYZE SNAPSHOT'}
+                        </button>
+
+                       <button 
+                        onClick={readAnalysis}
+                        disabled={isSpeaking || !selectedImage.analysis}
+                        className={`w-full py-3 rounded text-sm font-bold flex justify-center items-center gap-2 transition-all ${isSpeaking ? 'bg-cyber-accent text-black animate-pulse' : 'bg-cyber-700 text-white hover:bg-cyber-600'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                       >
+                         {isSpeaking ? <><Activity size={16} className="animate-spin"/> TRANSMITTING...</> : <><Volume2 size={16}/> READ ALOUD</>}
+                       </button>
+
+                       {/* Context-Aware Buttons */}
+                       {currentStatus === 'CRITICAL' && (
                          <button 
-                          onClick={readAnalysis}
-                          disabled={isSpeaking}
-                          className={`w-full py-3 rounded text-sm font-bold flex justify-center items-center gap-2 transition-all ${isSpeaking ? 'bg-cyber-accent text-black animate-pulse' : 'bg-cyber-700 text-white hover:bg-cyber-600'}`}
+                           onClick={() => alert("PEST CONTROL & DISEASE PROTOCOLS RECOMMENDED. ISOLATE PLANT.")}
+                           className="w-full py-3 bg-red-600 hover:bg-red-500 text-white rounded text-sm font-bold flex justify-center items-center gap-2 shadow-lg shadow-red-600/20"
                          >
-                           {isSpeaking ? <><Activity size={16} className="animate-spin"/> TRANSMITTING...</> : <><Volume2 size={16}/> READ ALOUD</>}
+                           <Siren size={16}/> PEST CONTROL
                          </button>
+                       )}
 
-                         {/* Context-Aware Buttons */}
-                         {currentStatus === 'CRITICAL' && (
-                           <button 
-                             onClick={() => alert("PEST CONTROL & DISEASE PROTOCOLS RECOMMENDED. ISOLATE PLANT.")}
-                             className="w-full py-3 bg-red-600 hover:bg-red-500 text-white rounded text-sm font-bold flex justify-center items-center gap-2 shadow-lg shadow-red-600/20"
-                           >
-                             <Siren size={16}/> PEST CONTROL
-                           </button>
-                         )}
-
-                         {(currentStatus === 'STRESSED') && (
-                           <button 
-                             onClick={() => alert("CHECK WATER AND LIGHT LEVELS")}
-                             className="w-full py-3 bg-yellow-600 hover:bg-yellow-500 text-white rounded text-sm font-bold flex justify-center items-center gap-2 shadow-lg shadow-yellow-600/20"
-                           >
-                             <Droplet size={16}/> CARE REMINDER
-                           </button>
-                         )}
-
+                       {(currentStatus === 'STRESSED') && (
                          <button 
-                             onClick={() => setLiveMode(true)}
-                             className="w-full py-3 bg-cyber-success/20 border border-cyber-success text-cyber-success hover:bg-cyber-success hover:text-black rounded text-sm font-bold flex justify-center items-center gap-2 transition-all"
-                           >
-                             <Radio size={16}/> ASK DR. GAIA
-                           </button>
-                       </div>
-                    </div>
-                  ) : (
-                    <button 
-                      onClick={() => { if(selectedImage) performManualAnalysis(selectedImage); }}
-                      disabled={isProcessing}
-                      className="w-full py-4 bg-cyber-700 hover:bg-cyber-600 rounded text-sm text-white flex justify-center items-center gap-2 border border-cyber-accent/20 hover:border-cyber-accent"
-                    >
-                      {isProcessing ? <Zap className="animate-pulse" size={16}/> : <BrainCircuit size={16}/>}
-                      {isProcessing ? 'SCANNING PLANT...' : 'ANALYZE PLANT'}
-                    </button>
-                  )}
+                           onClick={() => alert("CHECK WATER AND LIGHT LEVELS")}
+                           className="w-full py-3 bg-yellow-600 hover:bg-yellow-500 text-white rounded text-sm font-bold flex justify-center items-center gap-2 shadow-lg shadow-yellow-600/20"
+                         >
+                           <Droplet size={16}/> CARE REMINDER
+                         </button>
+                       )}
+
+                       <button 
+                           onClick={() => setLiveMode(true)}
+                           className="w-full py-3 bg-cyber-success/20 border border-cyber-success text-cyber-success hover:bg-cyber-success hover:text-black rounded text-sm font-bold flex justify-center items-center gap-2 transition-all"
+                         >
+                           <Radio size={16}/> ASK DR. GAIA
+                         </button>
+                     </div>
+                  </div>
                 </div>
              </div>
            ) : (
