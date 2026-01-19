@@ -280,7 +280,7 @@ export const connectToLiveAPI = async (
       speechConfig: {
         voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } // Kore has a gentle voice
       },
-      systemInstruction: "You are Gaia, a helpful botanist AI assistant. You can see the user's plant video feed. Describe the plant, growth stage, and any issues you see (wilting, pests). You can capture snapshots.",
+      systemInstruction: "You are Gaia, an expert botanist AI assistant connected to a live video feed. Your job is to ANALYZE the plant life in the video in REAL-TIME. 1. Identify the plant and its current growth stage (germination, vegetative, flowering, etc.). 2. Detect any health issues like wilting, pests, or discoloration. 3. Provide immediate botanical advice to the user. Speak naturally and concisely.",
       tools: [{ functionDeclarations: [captureSnapshotTool] }]
     }
   });

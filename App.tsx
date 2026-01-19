@@ -54,7 +54,8 @@ import {
   AlertCircle,
   Repeat,
   Power,
-  HelpCircle
+  HelpCircle,
+  Lightbulb
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -137,12 +138,14 @@ const App: React.FC = () => {
     const stage = text.match(/\[STAGE:\s*([^\]]+)\]/i);
     const tags = text.match(/\[TAGS:\s*([^\]]+)\]/i);
     const health = text.match(/\[HEALTH:\s*(HEALTHY|STRESSED|CRITICAL)\]/i);
+    const advice = text.match(/\[ADVICE:\s*([^\]]+)\]/i);
 
     return {
       confidence: confidence ? parseInt(confidence[1]) : undefined,
       growthStage: stage ? stage[1].trim() : undefined,
       eventTags: tags ? tags[1].split(',').map(t => t.trim()) : undefined,
-      healthStatus: health ? (health[1].toUpperCase() as 'HEALTHY'|'STRESSED'|'CRITICAL') : undefined
+      healthStatus: health ? (health[1].toUpperCase() as 'HEALTHY'|'STRESSED'|'CRITICAL') : undefined,
+      advice: advice ? advice[1].trim() : undefined
     };
   };
 
@@ -192,11 +195,23 @@ const App: React.FC = () => {
     if ('wakeLock' in navigator && settings.wakeLockActive) {
       try {
         wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+        console.log("Wake Lock active");
       } catch (err) {
         console.log(`Wake Lock Error: ${err}`);
       }
     }
   };
+
+  // Re-request wake lock if tab visibility changes
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && active) {
+        requestWakeLock();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [active]);
 
   useEffect(() => {
     if (active) {
@@ -261,11 +276,13 @@ const App: React.FC = () => {
             2. Determine Health Status: HEALTHY, STRESSED (needs water/light), or CRITICAL (disease/pests).
             3. Identify Growth Stage (e.g., Germination, Vegetative, Flowering, Fruiting).
             4. Identify Event Tags (e.g., new leaf, yellowing, wilting, flowering).
+            5. Provide specific BOTANICAL ADVICE based on the current stage and health. Do not use square brackets within the advice text.
             
             Format the end of your response with these exact tags:
             [HEALTH: STATUS]
             [STAGE: stage]
             [TAGS: tag1, tag2]
+            [ADVICE: Your advice here]
             [CONFIDENCE: X%]`;
             
             const analysis = await analyzeImage(dataUrl, prompt);
@@ -292,11 +309,13 @@ const App: React.FC = () => {
         2. Determine Health Status: HEALTHY, STRESSED (needs water/light), or CRITICAL (disease/pests).
         3. Identify Growth Stage (e.g., Germination, Vegetative, Flowering, Fruiting).
         4. Identify Event Tags (e.g., new leaf, yellowing, wilting, flowering).
+        5. Provide specific BOTANICAL ADVICE based on the current stage and health. Do not use square brackets within the advice text.
         
         Format the end of your response with these exact tags:
         [HEALTH: STATUS]
         [STAGE: stage]
         [TAGS: tag1, tag2]
+        [ADVICE: Your advice here]
         [CONFIDENCE: X%]`;
         
         const ans = await analyzeImage(img.dataUrl, prompt);
@@ -702,12 +721,23 @@ const App: React.FC = () => {
             {playbackMode && selectedImage ? (
                <img src={selectedImage.dataUrl} className="w-full h-full object-cover" />
             ) : (
-              <CameraFeed 
-                ref={cameraRef} 
-                active={isCameraEnabled} 
-                facingMode={settings.facingMode} 
-                resolution={settings.resolution}
-              />
+              <div className="relative w-full h-full">
+                 <CameraFeed 
+                    ref={cameraRef} 
+                    active={isCameraEnabled} 
+                    facingMode={settings.facingMode} 
+                    resolution={settings.resolution}
+                  />
+                  {!isCameraEnabled && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-20 backdrop-blur-sm pointer-events-none">
+                       <div className="text-center">
+                          <Power size={48} className="mx-auto text-gray-600 mb-2" />
+                          <p className="text-gray-500 font-mono text-sm tracking-widest">OPTICS OFFLINE</p>
+                          <p className="text-cyber-accent/30 text-xs mt-1">STANDBY MODE</p>
+                       </div>
+                    </div>
+                  )}
+              </div>
             )}
             
             <div className="absolute inset-0 pointer-events-none p-4 flex flex-col justify-between z-10">
@@ -716,7 +746,7 @@ const App: React.FC = () => {
                     <div className="text-xs font-mono text-cyber-accent">CAM-01 // {settings.facingMode.toUpperCase()}</div>
                     <div className="text-lg font-mono text-white font-bold">{currentTime.toLocaleTimeString()}</div>
                  </div>
-                 {active && !playbackMode && (
+                 {active && !playbackMode && isCameraEnabled && (
                    <div className="flex items-center gap-2 bg-red-900/80 text-white px-3 py-1 rounded animate-pulse">
                      <div className="w-2 h-2 rounded-full bg-red-500"></div>
                      <span className="text-xs font-bold tracking-widest">REC</span>
@@ -756,7 +786,8 @@ const App: React.FC = () => {
                <div className="pointer-events-auto flex gap-2">
                   <button 
                     onClick={() => setActive(!active)}
-                    className={`flex items-center space-x-2 px-4 sm:px-6 py-2 sm:py-3 rounded-md font-bold transition-all ${active ? 'bg-cyber-warn text-white shadow-[0_0_15px_#ef4444]' : 'bg-cyber-accent text-black shadow-[0_0_15px_#84cc16]'}`}
+                    disabled={!isCameraEnabled && !active}
+                    className={`flex items-center space-x-2 px-4 sm:px-6 py-2 sm:py-3 rounded-md font-bold transition-all ${active ? 'bg-cyber-warn text-white shadow-[0_0_15px_#ef4444]' : 'bg-cyber-accent text-black shadow-[0_0_15px_#84cc16]'} ${!isCameraEnabled && !active ? 'opacity-50 cursor-not-allowed grayscale' : ''}`}
                   >
                     {active ? <><Square size={18} fill="currentColor"/> <span className="hidden sm:inline">STOP</span></> : <><Play size={18} fill="currentColor"/> <span className="hidden sm:inline">START</span></>}
                   </button>
@@ -783,7 +814,8 @@ const App: React.FC = () => {
                  </button>
                  <button 
                    onClick={handleManualCapture}
-                   className="p-3 bg-cyber-700 rounded-full hover:bg-white hover:text-black transition-colors border border-gray-600 shadow-lg"
+                   disabled={!isCameraEnabled}
+                   className="p-3 bg-cyber-700 rounded-full hover:bg-white hover:text-black transition-colors border border-gray-600 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                    title="Capture Now"
                  >
                    <Eye size={20} />
@@ -881,13 +913,24 @@ const App: React.FC = () => {
                   </div>
                   
                   <div className="space-y-4">
+                     {/* Personalized Advice Card */}
+                     {selectedImage.advice && (
+                       <div className="bg-cyber-accent/10 border border-cyber-accent/30 p-3 rounded-lg relative overflow-hidden">
+                          <div className="absolute top-0 right-0 p-1">
+                             <Lightbulb size={12} className="text-cyber-accent" />
+                          </div>
+                          <h4 className="text-[10px] font-mono text-cyber-accent uppercase tracking-widest mb-1">Botanical Advice</h4>
+                          <p className="text-sm text-gray-200 leading-snug">{selectedImage.advice}</p>
+                       </div>
+                     )}
+
                      <div className="grid grid-cols-2 gap-2">
                         <div className="bg-black/20 p-2 rounded border border-cyber-700 flex flex-col">
                            <span className="text-[9px] text-gray-500 font-mono">HEALTH STATUS</span>
                            {renderHealthBadge(currentStatus)}
                         </div>
                         <div className="bg-black/20 p-2 rounded border border-cyber-700 flex flex-col text-right">
-                           <span className="text-[9px] text-gray-500 font-mono block">PRECISION</span>
+                           <span className="text-[9px] text-gray-500 font-mono block">CONFIDENCE</span>
                            <span className={`font-mono font-bold text-xs ${selectedImage.confidence && selectedImage.confidence < settings.minConfidenceThreshold ? 'text-yellow-500' : 'text-cyber-accent'}`}>
                                {selectedImage.confidence || '--'}%
                            </span>

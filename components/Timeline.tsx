@@ -26,11 +26,11 @@ const Timeline: React.FC<TimelineProps> = ({ images, onSelect }) => {
   const getStageIcon = (stage?: string) => {
     if (!stage) return null;
     const s = stage.toLowerCase();
-    if (s.includes('germinat') || s.includes('seed') || s.includes('sprout')) return <Sprout size={12} className="text-cyber-accent" />;
-    if (s.includes('flower') || s.includes('bloom') || s.includes('bud')) return <Flower size={12} className="text-pink-400" />;
-    if (s.includes('fruit') || s.includes('harvest') || s.includes('mature')) return <Sun size={12} className="text-orange-400" />;
-    if (s.includes('veg') || s.includes('leaf')) return <Leaf size={12} className="text-green-400" />;
-    return <HelpCircle size={12} className="text-gray-400" />;
+    if (s.includes('germinat') || s.includes('seed') || s.includes('sprout')) return <Sprout size={14} className="text-cyber-accent" />;
+    if (s.includes('flower') || s.includes('bloom') || s.includes('bud')) return <Flower size={14} className="text-pink-400" />;
+    if (s.includes('fruit') || s.includes('harvest') || s.includes('mature')) return <Sun size={14} className="text-orange-400" />;
+    if (s.includes('veg') || s.includes('leaf')) return <Leaf size={14} className="text-green-400" />;
+    return <HelpCircle size={14} className="text-gray-400" />;
   };
 
   if (images.length === 0) {
@@ -49,7 +49,7 @@ const Timeline: React.FC<TimelineProps> = ({ images, onSelect }) => {
           <div 
             key={img.id} 
             onClick={() => onSelect(img)}
-            className={`group relative cursor-pointer w-48 h-32 rounded-lg overflow-hidden border-2 transition-all hover:scale-105 ${getHealthColor(img)}`}
+            className={`group relative cursor-pointer w-48 h-32 rounded-lg overflow-hidden border-[3px] transition-all hover:scale-105 ${getHealthColor(img)}`}
           >
             <img src={img.dataUrl} alt="Snapshot" className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-black/40 group-hover:bg-black/0 transition-colors"></div>
@@ -63,7 +63,10 @@ const Timeline: React.FC<TimelineProps> = ({ images, onSelect }) => {
 
             {/* Growth Stage Icon */}
             {img.growthStage && (
-              <div className="absolute top-2 left-2 bg-black/80 p-1 rounded-full border border-gray-600 shadow-md backdrop-blur-sm">
+              <div 
+                className="absolute top-2 left-2 bg-black/80 p-1.5 rounded-full border border-gray-600 shadow-md backdrop-blur-sm"
+                title={`Stage: ${img.growthStage}`}
+              >
                 {getStageIcon(img.growthStage)}
               </div>
             )}

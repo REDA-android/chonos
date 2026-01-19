@@ -7,6 +7,7 @@ export interface CapturedImage {
   growthStage?: string;
   eventTags?: string[];
   healthStatus?: 'HEALTHY' | 'STRESSED' | 'CRITICAL';
+  advice?: string;
 }
 
 export enum AppMode {
