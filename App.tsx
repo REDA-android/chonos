@@ -81,6 +81,7 @@ const App: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [location, setLocation] = useState<{lat: number, lng: number} | undefined>(undefined);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [flash, setFlash] = useState(false);
 
   const cameraRef = useRef<CameraHandle>(null);
   const intervalRef = useRef<any>(null);
@@ -137,6 +138,8 @@ const App: React.FC = () => {
   };
 
   const handleManualCapture = async () => {
+    setFlash(true);
+    setTimeout(() => setFlash(false), 150);
     await captureAndProcess();
   };
 
@@ -174,6 +177,11 @@ const App: React.FC = () => {
              <div className="absolute inset-0 blur-2xl opacity-20 bg-cyber-accent animate-pulse"></div>
              <Leaf className="text-cyber-accent/30 relative" size={64} />
           </div>
+          <div className="text-[120px] font-mono font-thin text-white/5 tracking-tighter tabular-nums leading-none mt-8">
+              {currentTime.getHours().toString().padStart(2, '0')}
+              <span className="animate-pulse">:</span>
+              {currentTime.getMinutes().toString().padStart(2, '0')}
+          </div>
           <p className="text-cyber-accent/10 font-mono text-[10px] tracking-[0.5em] mt-8 uppercase">Gaia Passive Monitoring Active</p>
           <p className="text-white/5 text-[9px] absolute bottom-12 font-mono">DOUBLE CLICK TO RECALL SYSTEM</p>
         </div>
@@ -187,22 +195,22 @@ const App: React.FC = () => {
         </div>
         <div className="flex items-center gap-2">
           <button 
-            onClick={() => setStealthMode(true)} 
-            className={`p-2 rounded-full transition-all hover:bg-white/5 ${stealthMode ? 'text-cyber-accent' : 'text-gray-500'}`}
-            title="Stealth Mode (Hides UI)"
+            onClick={() => setStealthMode(!stealthMode)} 
+            className={`p-2 rounded-lg transition-all border ${stealthMode ? 'bg-cyber-accent/20 text-cyber-accent border-cyber-accent/30' : 'text-gray-500 border-white/5 hover:bg-white/5'}`}
+            title="Stealth Mode (Black Screen/Clock)"
           >
-            <EyeOff size={18} />
+            {stealthMode ? <Eye size={18} /> : <EyeOff size={18} />}
           </button>
           <button 
             onClick={() => setShowSettings(!showSettings)} 
-            className={`p-2 rounded-full transition-all ${showSettings ? 'bg-cyber-accent/20 text-cyber-accent border border-cyber-accent/30' : 'text-gray-400 hover:bg-white/5'}`}
+            className={`p-2 rounded-lg transition-all border ${showSettings ? 'bg-cyber-accent/20 text-cyber-accent border-cyber-accent/30' : 'text-gray-400 border-white/5 hover:bg-white/5'}`}
             title="Toggle Settings"
           >
             <Settings size={18}/>
           </button>
           <button 
             onClick={() => setLiveMode(true)} 
-            className="flex items-center gap-2 px-4 py-1.5 bg-cyber-accent/5 border border-cyber-accent/40 text-cyber-accent rounded-full font-bold text-[11px] tracking-widest hover:bg-cyber-accent hover:text-black transition-all shadow-[0_0_15px_rgba(132,204,22,0.1)]"
+            className="flex items-center gap-2 px-4 py-1.5 bg-cyber-accent/5 border border-cyber-accent/40 text-cyber-accent rounded-lg font-bold text-[11px] tracking-widest hover:bg-cyber-accent hover:text-black transition-all shadow-[0_0_15px_rgba(132,204,22,0.1)]"
           >
             <Video size={14}/> VIDEO LINK
           </button>
@@ -215,6 +223,9 @@ const App: React.FC = () => {
           <div className="grid lg:grid-cols-12 gap-6">
             <div className="lg:col-span-8 space-y-6">
               <div className="aspect-video bg-black rounded-xl overflow-hidden border border-cyber-700/50 relative shadow-2xl group ring-1 ring-white/5">
+                {/* Visual Flash Effect */}
+                <div className={`absolute inset-0 bg-white z-[60] pointer-events-none transition-opacity duration-200 ease-out ${flash ? 'opacity-80' : 'opacity-0'}`}></div>
+
                 {playbackMode && selectedImage ? (
                   <img src={selectedImage.dataUrl} className="w-full h-full object-contain" alt="Selected Frame" />
                 ) : (
@@ -253,11 +264,13 @@ const App: React.FC = () => {
                   >
                     <Power size={20}/>
                   </button>
+                  {/* Replaced Stealth Mode with Snapshot Button */}
                   <button 
-                    onClick={() => setStealthMode(true)} 
-                    className="p-3 bg-white/5 border border-white/10 text-white rounded-full hover:bg-white hover:text-black transition-all shadow-lg backdrop-blur-md"
+                    onClick={handleManualCapture} 
+                    className="p-3 bg-white/5 border border-white/10 text-white rounded-full hover:bg-cyber-accent hover:text-black transition-all shadow-lg backdrop-blur-md group"
+                    title="Capture Snapshot"
                   >
-                    <Eye size={20}/>
+                    <Camera size={20} className="group-hover:scale-110 transition-transform duration-200"/>
                   </button>
                 </div>
               </div>
