@@ -1,3 +1,4 @@
+
 import { 
   GoogleGenAI, 
   Modality, 
@@ -6,25 +7,19 @@ import {
   FunctionDeclaration
 } from "@google/genai";
 
-const API_KEY = process.env.API_KEY || '';
-
 // --- Configuration Constants ---
 const MODEL_CHAT_PRO = 'gemini-3-pro-preview';
-const MODEL_FAST_LITE = 'gemini-2.5-flash-lite';
+const MODEL_FAST_LITE = 'gemini-flash-lite-latest';
 const MODEL_SEARCH = 'gemini-3-flash-preview';
 const MODEL_MAPS = 'gemini-2.5-flash';
 const MODEL_VISION = 'gemini-3-pro-preview';
 const MODEL_LIVE = 'gemini-2.5-flash-native-audio-preview-12-2025';
 const MODEL_TTS = 'gemini-2.5-flash-preview-tts';
 
-// --- Instance ---
-let aiInstance: GoogleGenAI | null = null;
-
+// --- Instance Helper ---
+// Always create a new GoogleGenAI instance right before making an API call to ensure it uses the most up-to-date API key.
 const getAI = () => {
-  if (!aiInstance) {
-    aiInstance = new GoogleGenAI({ apiKey: API_KEY });
-  }
-  return aiInstance;
+  return new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 };
 
 // --- Tool Declarations ---
@@ -259,12 +254,13 @@ export const connectToLiveAPI = async (
               if (onCaptureTrigger) onCaptureTrigger();
               
               const session = await sessionPromise;
+              // sendToolResponse expects an object for functionResponses, not an array
               session.sendToolResponse({
-                functionResponses: [{
+                functionResponses: {
                   id: fc.id,
                   name: fc.name,
                   response: { result: "Snapshot captured successfully." }
-                }]
+                }
               });
             }
           }
